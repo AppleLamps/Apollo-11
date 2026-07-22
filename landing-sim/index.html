@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LUMINARY — Lunar Landing Sim</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="viewport" aria-label="Lunar landing viewport"></canvas>
+
+      <header class="brand-bar">
+        <div class="brand">
+          <p class="brand-mark">LUMINARY</p>
+          <p class="brand-sub">LM-99 descent autopilot · MVP</p>
+        </div>
+        <div class="run-controls">
+          <button type="button" id="btn-start" class="btn primary">Engage</button>
+          <button type="button" id="btn-reset" class="btn">Reset</button>
+          <button type="button" id="btn-pause" class="btn" disabled>Pause</button>
+        </div>
+      </header>
+
+      <aside class="telemetry" aria-live="polite">
+        <h2>Telemetry</h2>
+        <dl id="telemetry-grid"></dl>
+        <p id="phase-line" class="phase-line">STANDBY</p>
+        <p id="alarm-line" class="alarm-line" hidden></p>
+      </aside>
+
+      <aside class="fault-panel">
+        <h2>Inject fault</h2>
+        <div id="fault-buttons" class="fault-buttons"></div>
+        <p class="fault-hint">Faults can be armed before or during descent.</p>
+      </aside>
+
+      <footer class="status-strip">
+        <span id="status-text">Press Engage to begin powered descent.</span>
+        <span id="clock-text">T+0.0s</span>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

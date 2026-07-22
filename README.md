@@ -98,6 +98,16 @@ Please read [CONTRIBUTING.md][7] before opening a pull request.
 If you are interested in compiling the original source code, check
 out [Virtual AGC][8].
 
+## Landing sim (modern MVP)
+
+A browser Lunar Module descent sandbox (autopilot + faults + WebGL UI) lives in [`landing-sim/`](landing-sim/):
+
+```bash
+cd landing-sim
+npm install
+npm run dev
+```
+
 ## Attribution
 
 &nbsp;         | &nbsp;

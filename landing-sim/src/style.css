@@ -1,0 +1,329 @@
+:root {
+  --bg0: #07090d;
+  --bg1: #10151c;
+  --panel: rgba(12, 16, 22, 0.72);
+  --line: rgba(200, 184, 150, 0.22);
+  --bone: #e7e0d4;
+  --muted: #9aa3ad;
+  --amber: #d0a35a;
+  --signal: #7eb6c9;
+  --danger: #e07055;
+  --ok: #8fbf8a;
+  --font-display: "Syne", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg0);
+  color: var(--bone);
+  font-family: var(--font-mono);
+  overflow: hidden;
+}
+
+#app {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(1200px 700px at 70% 10%, rgba(126, 182, 201, 0.12), transparent 55%),
+    radial-gradient(900px 600px at 15% 85%, rgba(208, 163, 90, 0.1), transparent 50%),
+    linear-gradient(165deg, #0a0d12 0%, #141a22 48%, #0b0e14 100%);
+}
+
+#viewport {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.brand-bar,
+.telemetry,
+.fault-panel,
+.status-strip {
+  position: absolute;
+  z-index: 2;
+  backdrop-filter: blur(10px);
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.brand-bar {
+  top: 1.25rem;
+  left: 1.25rem;
+  right: 1.25rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  animation: rise-in 700ms ease-out both;
+}
+
+.brand-mark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2rem, 5vw, 3.4rem);
+  letter-spacing: 0.08em;
+  line-height: 0.95;
+  color: var(--bone);
+  text-shadow: 0 0 40px rgba(231, 224, 212, 0.15);
+}
+
+.brand-sub {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.run-controls {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--bone);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--amber);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: linear-gradient(180deg, rgba(208, 163, 90, 0.28), rgba(208, 163, 90, 0.08));
+  border-color: rgba(208, 163, 90, 0.55);
+  color: var(--amber);
+}
+
+.telemetry,
+.fault-panel {
+  top: 7.5rem;
+  width: min(300px, calc(100vw - 2rem));
+  padding: 1rem 1.1rem 1.15rem;
+  animation: rise-in 900ms ease-out both;
+}
+
+.telemetry {
+  left: 1.25rem;
+}
+
+.fault-panel {
+  right: 1.25rem;
+  animation-delay: 80ms;
+}
+
+.telemetry h2,
+.fault-panel h2 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+
+#telemetry-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+}
+
+#telemetry-grid dt {
+  margin: 0;
+  color: var(--muted);
+}
+
+#telemetry-grid dd {
+  margin: 0;
+  text-align: right;
+  color: var(--bone);
+}
+
+.phase-line {
+  margin: 1rem 0 0;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  letter-spacing: 0.14em;
+  color: var(--amber);
+}
+
+.phase-line[data-phase="LANDED"] {
+  color: var(--ok);
+}
+
+.phase-line[data-phase="CRASHED"],
+.phase-line[data-phase="ABORT"] {
+  color: var(--danger);
+}
+
+.alarm-line {
+  margin: 0.5rem 0 0;
+  color: var(--danger);
+  letter-spacing: 0.16em;
+  font-weight: 600;
+  animation: pulse-alarm 900ms ease-in-out infinite;
+}
+
+.fault-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.fault-btn {
+  appearance: none;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--bone);
+  font-family: var(--font-mono);
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.fault-btn span {
+  display: block;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.fault-btn small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.fault-btn:hover {
+  border-color: var(--signal);
+}
+
+.fault-btn.active {
+  border-color: var(--danger);
+  background: rgba(224, 112, 85, 0.12);
+}
+
+.fault-hint {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.status-strip {
+  left: 1.25rem;
+  right: 1.25rem;
+  bottom: 1.25rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  animation: rise-in 1100ms ease-out both;
+}
+
+#clock-text {
+  color: var(--signal);
+  white-space: nowrap;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-alarm {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (max-width: 860px) {
+  .brand-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .telemetry,
+  .fault-panel {
+    top: auto;
+    bottom: 4.5rem;
+    width: calc(50% - 1.5rem);
+    max-height: 38vh;
+    overflow: auto;
+  }
+
+  .telemetry {
+    left: 1rem;
+  }
+
+  .fault-panel {
+    right: 1rem;
+  }
+
+  .brand-mark {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 560px) {
+  .telemetry,
+  .fault-panel {
+    position: absolute;
+    width: calc(100% - 2rem);
+    left: 1rem;
+    right: 1rem;
+  }
+
+  .telemetry {
+    bottom: 4.5rem;
+    max-height: 28vh;
+  }
+
+  .fault-panel {
+    display: none;
+  }
+}
