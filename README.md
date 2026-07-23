@@ -102,7 +102,7 @@ out [Virtual AGC][8].
 
 A browser Lunar Module descent sandbox (autopilot + faults + WebGL UI) lives in [`landing-sim/`](landing-sim/).
 
-Live: [https://luminary-landing-sim.vercel.app](https://luminary-landing-sim.vercel.app)
+Live: [https://apollo-11-nine.vercel.app](https://apollo-11-nine.vercel.app)
 
 ```bash
 cd landing-sim

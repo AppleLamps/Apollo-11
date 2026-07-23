@@ -4,3 +4,5 @@ landing-sim/dist
 landing-sim/node_modules
 landing-sim/.vercel
 landing-sim/.env*
+.vercel
+.env*
