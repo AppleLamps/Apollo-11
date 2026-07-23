@@ -1,7 +1,5 @@
 import * as THREE from "three";
-import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
-import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import type { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
 import { CameraController } from "../rendering/CameraController";
 import { EngineEffects } from "../rendering/effects/EngineEffects";
 import { createLandingSite } from "../rendering/environment/createLandingSite";
@@ -37,8 +35,9 @@ export class LandingScene {
   private landingBeacon: THREE.Mesh | null;
   private sunLight: THREE.DirectionalLight;
   private composer: EffectComposer | null = null;
+  private composerRequestId = 0;
   private quality: GraphicsQuality;
-  private clock = new THREE.Clock();
+  private readonly startedAtMs = performance.now();
   private contextLost = false;
   private readonly resources = new ResourceTracker();
   private readonly landerWorld = new THREE.Vector3();
@@ -148,6 +147,7 @@ export class LandingScene {
   }
 
   dispose(): void {
+    this.composerRequestId++;
     window.removeEventListener("resize", this.onResize);
     this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
@@ -172,7 +172,7 @@ export class LandingScene {
   render(snapshot: Readonly<RenderSnapshot>): void {
     if (this.contextLost) return;
 
-    const t = this.clock.getElapsedTime();
+    const t = (performance.now() - this.startedAtMs) / 1000;
     const { telemetry } = snapshot;
     const x = saneCameraScalar(snapshot.x, 0) * METERS_TO_SCENE;
     const y = saneCameraScalar(snapshot.y, 100) * METERS_TO_SCENE;
@@ -220,10 +220,18 @@ export class LandingScene {
     }
   }
 
-  private configureComposer(enabled: boolean): void {
+  private async configureComposer(enabled: boolean): Promise<void> {
+    const requestId = ++this.composerRequestId;
     this.composer?.dispose();
     this.composer = null;
     if (!enabled) return;
+
+    const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }] = await Promise.all([
+      import("three/addons/postprocessing/EffectComposer.js"),
+      import("three/addons/postprocessing/RenderPass.js"),
+      import("three/addons/postprocessing/UnrealBloomPass.js"),
+    ]);
+    if (requestId !== this.composerRequestId || !GRAPHICS_PROFILES[this.quality].bloom) return;
 
     const composer = new EffectComposer(this.renderer);
     composer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS_PROFILES[this.quality].pixelRatioCap));
