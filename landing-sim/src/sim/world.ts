@@ -76,7 +76,8 @@ export class LandingWorld {
 
   togglePause(): void {
     if (!this.state.running) return;
-    if (this.state.phase === "LANDED" || this.state.phase === "CRASHED" || this.state.phase === "ABORT") {
+    // Terminal outcomes are frozen; abort may be paused for inspection.
+    if (this.state.phase === "LANDED" || this.state.phase === "CRASHED") {
       return;
     }
     this.state.paused = !this.state.paused;
@@ -98,7 +99,7 @@ export class LandingWorld {
       return;
     }
 
-    updateTerrainUnderLander(this.state);
+    updateTerrainUnderLander(this.state, capped);
     runGuidance(this.state, this.config, capped);
     applyPhysics(this.state, this.config, capped);
     this.state.timeSec = finiteOr(this.state.timeSec, 0) + capped;

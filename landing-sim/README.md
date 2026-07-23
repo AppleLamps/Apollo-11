@@ -34,6 +34,12 @@ Open the printed local URL (default `http://localhost:5173`).
 2. Press **Engage**
 3. Watch descent; use **Pause** / **Reset** as needed
 
+## Security notes
+
+- Fonts (Syne, IBM Plex Mono) are self-hosted via `@fontsource` — no Google Fonts runtime dependency
+- Production builds inject a Content-Security-Policy meta tag; `vite preview` / `vite` also send CSP headers
+- Production source maps are disabled
+
 ## Notes
 
 Guidance and numbers are intentionally simplified for an interactive MVP, not a bit-accurate AGC recreation. For the original flight software, see `../Luminary099`.

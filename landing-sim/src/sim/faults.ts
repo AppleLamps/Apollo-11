@@ -1,3 +1,4 @@
+import { clamp } from "./safeMath";
 import type { FaultId, FaultState, SimState } from "./types";
 
 export const FAULT_CATALOG: Omit<FaultState, "active">[] = [
@@ -47,30 +48,46 @@ export function emptyFaultFlags(): Record<FaultId, boolean> {
 export function toggleFault(state: SimState, id: string): boolean {
   if (!isFaultId(id)) return false;
   state.faults[id] = !state.faults[id];
-  if (id === "steep_slope") {
-    applyTerrainFault(state);
-  }
+  // Terrain morphs toward the new target over time (no instant pop into the lander).
   return true;
 }
 
+/** Instant terrain snap — only for cold start / reset at high altitude. */
 export function applyTerrainFault(state: SimState): void {
-  if (state.faults.steep_slope) {
-    state.surfaceSlopeRad = 0.38; // ~22°
-    state.surfaceHeightM = 4 + Math.sin(state.x * 0.01) * 2;
-  } else {
-    state.surfaceSlopeRad = 0.04;
-    state.surfaceHeightM = Math.sin(state.x * 0.004) * 1.5;
-  }
+  const target = targetTerrain(state);
+  state.surfaceHeightM = target.height;
+  state.surfaceSlopeRad = target.slope;
 }
 
-export function updateTerrainUnderLander(state: SimState): void {
+export function targetTerrain(state: SimState): { height: number; slope: number } {
   if (state.faults.steep_slope) {
-    state.surfaceHeightM = 6 + Math.sin(state.x * 0.02) * 3;
-    state.surfaceSlopeRad = 0.34 + 0.06 * Math.sin(state.x * 0.01);
-  } else {
-    state.surfaceHeightM = Math.sin(state.x * 0.004) * 1.5 + Math.sin(state.x * 0.011) * 0.4;
-    state.surfaceSlopeRad = 0.02 * Math.cos(state.x * 0.004);
+    return {
+      height: 6 + Math.sin(state.x * 0.02) * 3,
+      slope: 0.34 + 0.06 * Math.sin(state.x * 0.01),
+    };
   }
+  return {
+    height: Math.sin(state.x * 0.004) * 1.5 + Math.sin(state.x * 0.011) * 0.4,
+    slope: 0.02 * Math.cos(state.x * 0.004),
+  };
+}
+
+/**
+ * Rate-limited terrain morph. Near the surface, changes slow further so toggling
+ * steep-slope cannot instantly raise the ground into the lander.
+ */
+export function updateTerrainUnderLander(state: SimState, dt: number): void {
+  const step = Number.isFinite(dt) && dt > 0 ? dt : 1 / 60;
+  const target = targetTerrain(state);
+  const alt = state.y - state.surfaceHeightM;
+  const nearFactor = alt < 80 ? 0.22 : 1;
+  const maxHeightRate = 2.8 * nearFactor; // m/s
+  const maxSlopeRate = 0.14 * nearFactor; // rad/s
+
+  const maxDh = maxHeightRate * step;
+  const maxDs = maxSlopeRate * step;
+  state.surfaceHeightM += clamp(target.height - state.surfaceHeightM, -maxDh, maxDh);
+  state.surfaceSlopeRad += clamp(target.slope - state.surfaceSlopeRad, -maxDs, maxDs);
 }
 
 export function activeFaultLabels(state: SimState): string[] {

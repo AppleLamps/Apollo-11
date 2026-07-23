@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "./constants";
 import { applyPhysics, effectiveMaxThrust } from "./physics";
-import { emptyFaultFlags, isFaultId, toggleFault } from "./faults";
+import { emptyFaultFlags, isFaultId, toggleFault, updateTerrainUnderLander } from "./faults";
 import { runGuidance } from "./guidance";
 import { LandingWorld } from "./world";
 import { validateConfig } from "./validateConfig";
@@ -159,6 +159,18 @@ describe("engage / reset lifecycle", () => {
     world.step(0.05);
     expect(world.state.timeSec).toBeGreaterThan(t);
   });
+
+  it("allows pausing during abort", () => {
+    const world = new LandingWorld();
+    world.engage();
+    world.state.phase = "ABORT";
+    world.state.running = true;
+    world.togglePause();
+    expect(world.state.paused).toBe(true);
+    const y = world.state.y;
+    world.step(0.05);
+    expect(world.state.y).toBe(y);
+  });
 });
 
 describe("landing detection", () => {
@@ -172,10 +184,16 @@ describe("landing detection", () => {
     expect(world.state.phase).toBe("LANDED");
   });
 
-  it("toggleFault steep_slope updates terrain without throwing", () => {
-    const state = baseState();
+  it("rate-limits steep_slope terrain morph near the surface", () => {
+    const state = baseState({ y: 20, surfaceHeightM: 0, surfaceSlopeRad: 0.02 });
     expect(toggleFault(state, "steep_slope")).toBe(true);
     expect(state.faults.steep_slope).toBe(true);
+    // One short step must not snap to the full steep target (~0.34 rad / ~6 m)
+    updateTerrainUnderLander(state, 0.05);
+    expect(state.surfaceSlopeRad).toBeLessThan(0.2);
+    expect(state.surfaceHeightM).toBeLessThan(3);
+    // Over time it approaches the steep target
+    for (let i = 0; i < 400; i++) updateTerrainUnderLander(state, 0.05);
     expect(state.surfaceSlopeRad).toBeGreaterThan(0.3);
   });
 });

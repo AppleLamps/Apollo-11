@@ -4,12 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LUMINARY — Lunar Landing Sim</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Syne:wght@600;700;800&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body>
     <div id="app">
@@ -27,7 +21,7 @@
         </div>
       </header>
 
-      <aside class="telemetry" aria-live="polite">
+      <aside class="telemetry">
         <h2>Telemetry</h2>
         <dl id="telemetry-grid"></dl>
         <p id="phase-line" class="phase-line">STANDBY</p>
@@ -44,6 +38,9 @@
         <span id="status-text">Press Engage to begin powered descent.</span>
         <span id="clock-text">T+0.0s</span>
       </footer>
+
+      <!-- Throttled announcements only (not per-frame telemetry). -->
+      <div id="a11y-announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

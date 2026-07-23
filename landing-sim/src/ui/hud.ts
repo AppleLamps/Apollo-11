@@ -19,6 +19,9 @@ const TELEMETRY_KEYS = [
   "Slope",
 ] as const;
 
+/** Minimum gap between polite status announcements (ms). */
+const STATUS_ANNOUNCE_MS = 1600;
+
 export class Hud {
   private telemetryGrid: HTMLDListElement;
   private phaseLine: HTMLElement;
@@ -26,10 +29,13 @@ export class Hud {
   private statusText: HTMLElement;
   private clockText: HTMLElement;
   private faultButtons: HTMLElement;
+  private announce: HTMLElement;
   private btnStart: HTMLButtonElement;
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
   private valueNodes = new Map<string, HTMLElement>();
+  private lastAnnounceKey = "";
+  private lastAnnounceAt = 0;
 
   constructor(
     private world: LandingWorld,
@@ -41,6 +47,7 @@ export class Hud {
     this.statusText = el("status-text");
     this.clockText = el("clock-text");
     this.faultButtons = el("fault-buttons");
+    this.announce = el("a11y-announce");
     this.btnStart = el("btn-start") as HTMLButtonElement;
     this.btnReset = el("btn-reset") as HTMLButtonElement;
     this.btnPause = el("btn-pause") as HTMLButtonElement;
@@ -151,23 +158,46 @@ export class Hud {
 
     this.clockText.textContent = `T+${fmt(t.timeSec, 1)}s`;
 
-    if (t.outcome) {
-      this.statusText.textContent = t.outcome;
-    } else if (!this.world.state.running) {
-      this.statusText.textContent = "Press Engage to begin powered descent.";
-    } else if (this.world.state.paused) {
-      this.statusText.textContent = "Paused.";
-    } else {
-      const faults = Object.entries(this.world.state.faults)
-        .filter(([, on]) => on)
-        .map(([id]) => id.replaceAll("_", " "));
-      this.statusText.textContent = faults.length
-        ? `Autopilot flying with faults: ${faults.join(", ")}`
-        : "Autopilot flying clean.";
-    }
+    const status = this.statusMessage(t);
+    this.statusText.textContent = status;
+    this.maybeAnnounce(t, status);
 
     this.btnPause.disabled = !this.world.state.running;
     this.syncFaultButtons();
+  }
+
+  private statusMessage(t: Telemetry): string {
+    if (t.outcome) return t.outcome;
+    if (!this.world.state.running) return "Press Engage to begin powered descent.";
+    if (this.world.state.paused) return "Paused.";
+    const faults = Object.entries(this.world.state.faults)
+      .filter(([, on]) => on)
+      .map(([id]) => id.replaceAll("_", " "));
+    return faults.length
+      ? `Autopilot flying with faults: ${faults.join(", ")}`
+      : "Autopilot flying clean.";
+  }
+
+  /**
+   * Announce phase / alarm / outcome changes immediately; throttle routine status.
+   * Visual telemetry updates every frame without hitting aria-live.
+   */
+  private maybeAnnounce(t: Telemetry, status: string): void {
+    const key = `${t.phase}|${t.alarm ?? ""}|${t.outcome ?? ""}|${status}`;
+    if (key === this.lastAnnounceKey) return;
+
+    const now = performance.now();
+    const phaseAlarmOutcome = `${t.phase}|${t.alarm ?? ""}|${t.outcome ?? ""}`;
+    const prevPhaseAlarmOutcome = this.lastAnnounceKey.split("|").slice(0, 3).join("|");
+    const urgent = phaseAlarmOutcome !== prevPhaseAlarmOutcome || Boolean(t.outcome) || Boolean(t.alarm);
+
+    if (!urgent && now - this.lastAnnounceAt < STATUS_ANNOUNCE_MS) return;
+
+    this.lastAnnounceKey = key;
+    this.lastAnnounceAt = now;
+    this.announce.textContent = t.alarm
+      ? `${t.phase}. Alarm ${t.alarm}. ${status}`
+      : `${t.phase}. ${status}`;
   }
 }
 

@@ -1,3 +1,9 @@
+import "@fontsource/syne/latin-600.css";
+import "@fontsource/syne/latin-700.css";
+import "@fontsource/syne/latin-800.css";
+import "@fontsource/ibm-plex-mono/latin-400.css";
+import "@fontsource/ibm-plex-mono/latin-500.css";
+import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./style.css";
 import { sanitizeDt } from "./sim/safeMath";
 import { LandingWorld } from "./sim/world";
