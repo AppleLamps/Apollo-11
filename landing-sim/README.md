@@ -37,6 +37,8 @@ Open the printed local URL (default `http://localhost:5173`).
 1. Optionally arm faults in **Inject fault**
 2. Press **Engage**
 3. Watch descent; use **Pause** / **Reset** as needed
+4. Camera views: **Chase / Free / Side / Pad / High** (or keys `1`–`5`)
+   - **Free**: drag to orbit, scroll to zoom
 
 ## Security notes
 

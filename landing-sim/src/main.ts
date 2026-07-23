@@ -17,7 +17,7 @@ if (!(canvas instanceof HTMLCanvasElement)) {
 
 const world = new LandingWorld();
 const scene = new LandingScene(canvas);
-const hud = new Hud(world, () => hud.render(world.telemetry()));
+const hud = new Hud(world, scene, () => hud.render(world.telemetry()));
 
 let last = performance.now();
 

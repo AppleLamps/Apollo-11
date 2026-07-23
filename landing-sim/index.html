@@ -8,11 +8,12 @@
   <body>
     <div id="app">
       <canvas id="viewport" aria-label="Lunar landing viewport"></canvas>
+      <div class="vignette" aria-hidden="true"></div>
 
       <header class="brand-bar">
         <div class="brand">
           <p class="brand-mark">LUMINARY</p>
-          <p class="brand-sub">LM-99 descent autopilot · MVP</p>
+          <p class="brand-sub">LM-99 descent autopilot</p>
         </div>
         <div class="run-controls">
           <button type="button" id="btn-start" class="btn primary">Engage</button>
@@ -31,15 +32,19 @@
       <aside class="fault-panel">
         <h2>Inject fault</h2>
         <div id="fault-buttons" class="fault-buttons"></div>
-        <p class="fault-hint">Faults can be armed before or during descent.</p>
+        <p class="fault-hint">Arm faults before or during descent.</p>
       </aside>
+
+      <div class="camera-dock">
+        <div class="camera-modes" id="camera-modes" role="group" aria-label="Camera views"></div>
+        <p id="camera-hint" class="camera-hint">Chase camera</p>
+      </div>
 
       <footer class="status-strip">
         <span id="status-text">Press Engage to begin powered descent.</span>
         <span id="clock-text">T+0.0s</span>
       </footer>
 
-      <!-- Throttled announcements only (not per-frame telemetry). -->
       <div id="a11y-announce" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     </div>
     <script type="module" src="/src/main.ts"></script>

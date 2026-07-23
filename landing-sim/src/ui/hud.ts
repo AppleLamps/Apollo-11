@@ -1,6 +1,8 @@
 import { FAULT_CATALOG, isFaultId } from "../sim/faults";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
+import { CAMERA_MODES, type CameraMode } from "./cameraRig";
+import type { LandingScene } from "./scene";
 
 function fmt(n: number, digits = 1): string {
   if (!Number.isFinite(n)) return "—";
@@ -33,12 +35,15 @@ export class Hud {
   private btnStart: HTMLButtonElement;
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
+  private cameraModes: HTMLElement;
+  private cameraHint: HTMLElement;
   private valueNodes = new Map<string, HTMLElement>();
   private lastAnnounceKey = "";
   private lastAnnounceAt = 0;
 
   constructor(
     private world: LandingWorld,
+    private scene: LandingScene,
     private onChange: () => void,
   ) {
     this.telemetryGrid = el("telemetry-grid") as HTMLDListElement;
@@ -51,9 +56,12 @@ export class Hud {
     this.btnStart = el("btn-start") as HTMLButtonElement;
     this.btnReset = el("btn-reset") as HTMLButtonElement;
     this.btnPause = el("btn-pause") as HTMLButtonElement;
+    this.cameraModes = el("camera-modes");
+    this.cameraHint = el("camera-hint");
 
     this.mountTelemetrySkeleton();
     this.mountFaults();
+    this.mountCameraModes();
     this.bindControls();
     this.render(world.telemetry());
   }
@@ -98,6 +106,39 @@ export class Hud {
     this.syncFaultButtons();
   }
 
+  private mountCameraModes(): void {
+    this.cameraModes.replaceChildren();
+    for (const mode of CAMERA_MODES) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn";
+      btn.dataset.cameraMode = mode.id;
+      btn.textContent = mode.label;
+      btn.title = mode.hint;
+      btn.addEventListener("click", () => {
+        this.setCameraMode(mode.id);
+      });
+      this.cameraModes.append(btn);
+    }
+    this.syncCameraModes();
+  }
+
+  private setCameraMode(mode: CameraMode): void {
+    this.scene.setCameraMode(mode);
+    this.syncCameraModes();
+  }
+
+  private syncCameraModes(): void {
+    const active = this.scene.getCameraMode();
+    const meta = CAMERA_MODES.find((m) => m.id === active);
+    this.cameraHint.textContent = meta?.hint ?? "";
+    for (const btn of this.cameraModes.querySelectorAll<HTMLButtonElement>(".btn")) {
+      const id = btn.dataset.cameraMode as CameraMode | undefined;
+      btn.classList.toggle("active", id === active);
+      btn.setAttribute("aria-pressed", String(id === active));
+    }
+  }
+
   private bindControls(): void {
     this.btnStart.addEventListener("click", () => {
       this.world.engage();
@@ -115,6 +156,24 @@ export class Hud {
       this.world.togglePause();
       this.btnPause.textContent = this.world.state.paused ? "Resume" : "Pause";
       this.onChange();
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      const map: Record<string, CameraMode> = {
+        "1": "chase",
+        "2": "orbit",
+        "3": "side",
+        "4": "pad",
+        "5": "high",
+      };
+      const mode = map[event.key];
+      if (mode) {
+        event.preventDefault();
+        this.setCameraMode(mode);
+      }
     });
   }
 

@@ -1,11 +1,11 @@
 :root {
-  --bg0: #07090d;
-  --bg1: #10151c;
-  --panel: rgba(12, 16, 22, 0.72);
-  --line: rgba(200, 184, 150, 0.22);
-  --bone: #e7e0d4;
-  --muted: #9aa3ad;
-  --amber: #d0a35a;
+  --bg0: #05070c;
+  --panel: rgba(8, 11, 16, 0.55);
+  --panel-strong: rgba(10, 14, 20, 0.72);
+  --line: rgba(214, 196, 158, 0.18);
+  --bone: #efe8db;
+  --muted: #939ba6;
+  --amber: #d4a85c;
   --signal: #7eb6c9;
   --danger: #e07055;
   --ok: #8fbf8a;
@@ -43,10 +43,7 @@ body {
   position: relative;
   width: 100%;
   height: 100%;
-  background:
-    radial-gradient(1200px 700px at 70% 10%, rgba(126, 182, 201, 0.12), transparent 55%),
-    radial-gradient(900px 600px at 15% 85%, rgba(208, 163, 90, 0.1), transparent 50%),
-    linear-gradient(165deg, #0a0d12 0%, #141a22 48%, #0b0e14 100%);
+  background: #05070c;
 }
 
 #viewport {
@@ -55,28 +52,45 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  cursor: grab;
+}
+
+#viewport:active {
+  cursor: grabbing;
+}
+
+.vignette {
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.45) 100%),
+    linear-gradient(180deg, rgba(5, 7, 12, 0.35) 0%, transparent 22%, transparent 70%, rgba(5, 7, 12, 0.5) 100%);
 }
 
 .brand-bar,
 .telemetry,
 .fault-panel,
-.status-strip {
+.status-strip,
+.camera-dock {
   position: absolute;
   z-index: 2;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px) saturate(1.1);
   background: var(--panel);
   border: 1px solid var(--line);
 }
 
 .brand-bar {
-  top: 1.25rem;
-  left: 1.25rem;
-  right: 1.25rem;
+  top: 1rem;
+  left: 1rem;
+  right: 1rem;
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
-  padding: 1rem 1.25rem;
+  padding: 0.85rem 1.1rem;
+  background: linear-gradient(180deg, rgba(12, 16, 22, 0.72), rgba(12, 16, 22, 0.35));
   animation: rise-in 700ms ease-out both;
 }
 
@@ -84,23 +98,24 @@ body {
   margin: 0;
   font-family: var(--font-display);
   font-weight: 800;
-  font-size: clamp(2rem, 5vw, 3.4rem);
-  letter-spacing: 0.08em;
+  font-size: clamp(1.9rem, 4.5vw, 3.1rem);
+  letter-spacing: 0.1em;
   line-height: 0.95;
   color: var(--bone);
-  text-shadow: 0 0 40px rgba(231, 224, 212, 0.15);
+  text-shadow: 0 0 48px rgba(231, 224, 212, 0.18);
 }
 
 .brand-sub {
-  margin: 0.35rem 0 0;
+  margin: 0.3rem 0 0;
   color: var(--muted);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .run-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.45rem;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -108,15 +123,19 @@ body {
 .btn {
   appearance: none;
   border: 1px solid var(--line);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--bone);
   font-family: var(--font-mono);
-  font-size: 0.8rem;
-  letter-spacing: 0.06em;
+  font-size: 0.76rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0.65rem 1rem;
+  padding: 0.6rem 0.95rem;
   cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease,
+    color 160ms ease;
 }
 
 .btn:hover:not(:disabled) {
@@ -130,35 +149,42 @@ body {
 }
 
 .btn.primary {
-  background: linear-gradient(180deg, rgba(208, 163, 90, 0.28), rgba(208, 163, 90, 0.08));
-  border-color: rgba(208, 163, 90, 0.55);
+  background: linear-gradient(180deg, rgba(212, 168, 92, 0.32), rgba(212, 168, 92, 0.08));
+  border-color: rgba(212, 168, 92, 0.55);
   color: var(--amber);
+}
+
+.btn.active {
+  border-color: var(--signal);
+  color: var(--signal);
+  background: rgba(126, 182, 201, 0.12);
 }
 
 .telemetry,
 .fault-panel {
-  top: 7.5rem;
-  width: min(300px, calc(100vw - 2rem));
-  padding: 1rem 1.1rem 1.15rem;
+  top: 6.6rem;
+  width: min(280px, calc(100vw - 2rem));
+  padding: 0.9rem 1rem 1rem;
+  background: var(--panel-strong);
   animation: rise-in 900ms ease-out both;
 }
 
 .telemetry {
-  left: 1.25rem;
+  left: 1rem;
 }
 
 .fault-panel {
-  right: 1.25rem;
+  right: 1rem;
   animation-delay: 80ms;
 }
 
 .telemetry h2,
 .fault-panel h2 {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.65rem;
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 0.86rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--signal);
 }
@@ -167,8 +193,8 @@ body {
   margin: 0;
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 0.35rem 0.75rem;
-  font-size: 0.78rem;
+  gap: 0.32rem 0.7rem;
+  font-size: 0.74rem;
 }
 
 #telemetry-grid dt {
@@ -180,13 +206,14 @@ body {
   margin: 0;
   text-align: right;
   color: var(--bone);
+  font-variant-numeric: tabular-nums;
 }
 
 .phase-line {
-  margin: 1rem 0 0;
+  margin: 0.9rem 0 0;
   font-family: var(--font-display);
-  font-size: 1.15rem;
-  letter-spacing: 0.14em;
+  font-size: 1.05rem;
+  letter-spacing: 0.16em;
   color: var(--amber);
 }
 
@@ -200,7 +227,7 @@ body {
 }
 
 .alarm-line {
-  margin: 0.5rem 0 0;
+  margin: 0.45rem 0 0;
   color: var(--danger);
   letter-spacing: 0.16em;
   font-weight: 600;
@@ -210,7 +237,7 @@ body {
 .fault-buttons {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.4rem;
 }
 
 .fault-btn {
@@ -220,22 +247,22 @@ body {
   background: rgba(255, 255, 255, 0.02);
   color: var(--bone);
   font-family: var(--font-mono);
-  padding: 0.55rem 0.65rem;
+  padding: 0.5rem 0.6rem;
   cursor: pointer;
   transition: border-color 160ms ease, background 160ms ease;
 }
 
 .fault-btn span {
   display: block;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   letter-spacing: 0.04em;
 }
 
 .fault-btn small {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.18rem;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
 }
 
 .fault-btn:hover {
@@ -248,21 +275,54 @@ body {
 }
 
 .fault-hint {
-  margin: 0.75rem 0 0;
+  margin: 0.7rem 0 0;
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.66rem;
   line-height: 1.4;
 }
 
+.camera-dock {
+  left: 50%;
+  bottom: 4.35rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.65rem 0.6rem;
+  animation: rise-in 1000ms ease-out both;
+  max-width: calc(100vw - 2rem);
+}
+
+.camera-modes {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.camera-modes .btn {
+  padding: 0.45rem 0.7rem;
+  font-size: 0.7rem;
+}
+
+.camera-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-align: center;
+}
+
 .status-strip {
-  left: 1.25rem;
-  right: 1.25rem;
-  bottom: 1.25rem;
+  left: 1rem;
+  right: 1rem;
+  bottom: 1rem;
   display: flex;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.75rem 1rem;
-  font-size: 0.78rem;
+  padding: 0.7rem 0.95rem;
+  font-size: 0.74rem;
   color: var(--muted);
   animation: rise-in 1100ms ease-out both;
 }
@@ -270,6 +330,7 @@ body {
 #clock-text {
   color: var(--signal);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 @keyframes rise-in {
@@ -283,6 +344,21 @@ body {
   }
 }
 
+.camera-dock {
+  animation-name: rise-in-center;
+}
+
+@keyframes rise-in-center {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
 @keyframes pulse-alarm {
   0%,
   100% {
@@ -293,7 +369,7 @@ body {
   }
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .brand-bar {
     flex-direction: column;
     align-items: flex-start;
@@ -302,40 +378,31 @@ body {
   .telemetry,
   .fault-panel {
     top: auto;
-    bottom: 4.5rem;
-    width: calc(50% - 1.5rem);
-    max-height: 38vh;
+    bottom: 7.6rem;
+    width: calc(50% - 1.35rem);
+    max-height: 32vh;
     overflow: auto;
   }
 
-  .telemetry {
-    left: 1rem;
-  }
-
-  .fault-panel {
-    right: 1rem;
-  }
-
-  .brand-mark {
-    font-size: 2rem;
+  .camera-dock {
+    bottom: 4.1rem;
   }
 }
 
 @media (max-width: 560px) {
-  .telemetry,
   .fault-panel {
-    position: absolute;
-    width: calc(100% - 2rem);
-    left: 1rem;
-    right: 1rem;
+    display: none;
   }
 
   .telemetry {
-    bottom: 4.5rem;
-    max-height: 28vh;
+    width: calc(100% - 2rem);
+    left: 1rem;
+    right: 1rem;
+    bottom: 7.4rem;
+    max-height: 26vh;
   }
 
-  .fault-panel {
-    display: none;
+  .brand-mark {
+    font-size: 1.8rem;
   }
 }
