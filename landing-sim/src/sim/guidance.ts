@@ -1,9 +1,13 @@
-import { clamp, effectiveMaxThrust, totalMass } from "./physics";
+import { effectiveMaxThrust, totalMass } from "./physics";
+import { clamp, finiteOr, sanitizeDt } from "./safeMath";
 import type { SimConfig, SimState } from "./types";
 
 /**
  * Simplified P63→P64→P65 style descent autopilot.
  * Uses sensed altitude (fault-aware) and commanded pitch/throttle.
+ *
+ * Computer-overload (1202) isolates *guidance* only: physics keeps integrating
+ * with the last commanded throttle, matching AGC executive-overflow behavior.
  */
 export function runGuidance(state: SimState, config: SimConfig, dt: number): void {
   if (!state.running || state.paused) return;
@@ -11,12 +15,16 @@ export function runGuidance(state: SimState, config: SimConfig, dt: number): voi
     return;
   }
 
+  const step = sanitizeDt(dt);
+  if (step === null) return;
+
   if (state.guidanceInhibitSec > 0) {
-    state.guidanceInhibitSec = Math.max(0, state.guidanceInhibitSec - dt);
+    state.guidanceInhibitSec = Math.max(0, state.guidanceInhibitSec - step);
     state.alarm = "1202";
-    // Hold last throttle; add jitter while "computer" is overloaded
+    // Hold last throttle; add bounded jitter while "computer" is overloaded.
+    // Do not rewrite phase, pitch targets, or abort logic during inhibit.
     state.throttle = clamp(
-      state.throttle + Math.sin(state.timeSec * 40) * 0.03,
+      finiteOr(state.throttle, 0.5) + Math.sin(state.timeSec * 40) * 0.03,
       0.1,
       1,
     );
@@ -34,7 +42,7 @@ export function runGuidance(state: SimState, config: SimConfig, dt: number): voi
   }
 
   const alt = sensedAltitude(state, config);
-  const speed = Math.hypot(state.vx, state.vy);
+  const speed = Math.hypot(finiteOr(state.vx, 0), finiteOr(state.vy, 0));
 
   // Phase machine
   if (alt > 2500) {
@@ -66,7 +74,7 @@ export function runGuidance(state: SimState, config: SimConfig, dt: number): voi
     pitchError * attitudeGain - state.pitchRate * 2.2,
     -1.2,
     1.2,
-  ) * dt;
+  ) * step;
 
   // Throttle to track vertical acceleration need
   const mass = totalMass(state, config);
@@ -74,7 +82,8 @@ export function runGuidance(state: SimState, config: SimConfig, dt: number): voi
   const vyError = targetVy - state.vy;
   const gain = state.phase === "FINAL" ? 1.1 : 0.55;
   const desiredAy = config.gravity + vyError * gain;
-  const thrustForAy = (desiredAy * mass) / Math.max(0.35, Math.cos(state.pitch));
+  const cosPitch = Math.max(0.35, Math.abs(Math.cos(state.pitch)));
+  const thrustForAy = (desiredAy * mass) / cosPitch;
   let throttle = thrustForAy / maxThrust;
 
   // Horizontal assist: add a little thrust when pitched over
@@ -86,11 +95,11 @@ export function runGuidance(state: SimState, config: SimConfig, dt: number): voi
     // Null residual horizontal with brief pitch, then upright for touchdown
     if (alt < 60 && Math.abs(state.vx) > 0.8) {
       const nullPitch = clamp(-state.vx * 0.045, -0.22, 0.22);
-      state.pitchRate += (nullPitch - state.pitch) * 4 * dt;
+      state.pitchRate += (nullPitch - state.pitch) * 4 * step;
     }
     if (alt < 25) {
       // Force upright for landing gear contact
-      state.pitchRate += (0 - state.pitch) * 6 * dt;
+      state.pitchRate += (0 - state.pitch) * 6 * step;
     }
     throttle = clamp(throttle, 0.18, 0.98);
     if (alt < 12) {
@@ -154,7 +163,8 @@ function desiredPitch(
   const vxError = targetVx - state.vx;
   const desiredAx = clamp(vxError * 0.35, -6, 6);
   // Choose pitch so thrust horizontal component tracks desiredAx
-  const sinPitch = clamp((desiredAx * mass) / Math.max(1, state.throttle * maxThrust || maxThrust * 0.7), -0.85, 0.85);
+  const thrustDenom = Math.max(1, finiteOr(state.throttle, 0) * maxThrust || maxThrust * 0.7);
+  const sinPitch = clamp((desiredAx * mass) / thrustDenom, -0.85, 0.85);
   let pitch = Math.asin(sinPitch);
 
   // Near surface, upright

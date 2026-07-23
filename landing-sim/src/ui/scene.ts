@@ -15,6 +15,11 @@ export class LandingScene {
   private terrain: THREE.Mesh;
   private targetMarker: THREE.Mesh;
   private clock = new THREE.Clock();
+  private readonly camTarget = new THREE.Vector3();
+  private readonly lookAtTarget = new THREE.Vector3();
+  private readonly onResize = (): void => {
+    this.resize();
+  };
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({
@@ -83,8 +88,13 @@ export class LandingScene {
     this.dust = this.makeDust();
     this.scene.add(this.dust);
 
-    window.addEventListener("resize", () => this.resize());
+    window.addEventListener("resize", this.onResize);
     this.resize();
+  }
+
+  dispose(): void {
+    window.removeEventListener("resize", this.onResize);
+    this.renderer.dispose();
   }
 
   resize(): void {
@@ -123,11 +133,10 @@ export class LandingScene {
     const camDist = THREE.MathUtils.clamp(18 + alt * METERS_TO_SCENE * 0.55, 22, 140);
     const camHeight = THREE.MathUtils.clamp(10 + alt * METERS_TO_SCENE * 0.25, 12, 70);
     const lookY = y + 1.5;
-    this.camera.position.lerp(
-      new THREE.Vector3(x - camDist * 0.55, y + camHeight * 0.45, camDist),
-      0.06,
-    );
-    this.camera.lookAt(x, lookY, 0);
+    this.camTarget.set(x - camDist * 0.55, y + camHeight * 0.45, camDist);
+    this.camera.position.lerp(this.camTarget, 0.06);
+    this.lookAtTarget.set(x, lookY, 0);
+    this.camera.lookAt(this.lookAtTarget);
 
     this.terrain.rotation.z = -slope * 0.15;
     this.targetMarker.position.y = world.state.surfaceHeightM * METERS_TO_SCENE + 0.05;

@@ -1,10 +1,23 @@
-import { FAULT_CATALOG } from "../sim/faults";
-import type { FaultId, Telemetry } from "../sim/types";
+import { FAULT_CATALOG, isFaultId } from "../sim/faults";
+import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
 
 function fmt(n: number, digits = 1): string {
+  if (!Number.isFinite(n)) return "—";
   return n.toFixed(digits);
 }
+
+const TELEMETRY_KEYS = [
+  "Altitude",
+  "Radar",
+  "Range to site",
+  "Vx / Vy",
+  "Pitch",
+  "Throttle",
+  "Thrust",
+  "Fuel",
+  "Slope",
+] as const;
 
 export class Hud {
   private telemetryGrid: HTMLDListElement;
@@ -16,6 +29,7 @@ export class Hud {
   private btnStart: HTMLButtonElement;
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
+  private valueNodes = new Map<string, HTMLElement>();
 
   constructor(
     private world: LandingWorld,
@@ -31,9 +45,23 @@ export class Hud {
     this.btnReset = el("btn-reset") as HTMLButtonElement;
     this.btnPause = el("btn-pause") as HTMLButtonElement;
 
+    this.mountTelemetrySkeleton();
     this.mountFaults();
     this.bindControls();
     this.render(world.telemetry());
+  }
+
+  private mountTelemetrySkeleton(): void {
+    this.telemetryGrid.replaceChildren();
+    this.valueNodes.clear();
+    for (const key of TELEMETRY_KEYS) {
+      const dt = document.createElement("dt");
+      dt.textContent = key;
+      const dd = document.createElement("dd");
+      dd.textContent = "—";
+      this.telemetryGrid.append(dt, dd);
+      this.valueNodes.set(key, dd);
+    }
   }
 
   private mountFaults(): void {
@@ -44,9 +72,17 @@ export class Hud {
       btn.className = "fault-btn";
       btn.dataset.faultId = fault.id;
       btn.title = fault.description;
-      btn.innerHTML = `<span>${fault.label}</span><small>${fault.description}</small>`;
+
+      const label = document.createElement("span");
+      label.textContent = fault.label;
+      const detail = document.createElement("small");
+      detail.textContent = fault.description;
+      btn.append(label, detail);
+
       btn.addEventListener("click", () => {
-        this.world.toggleFault(fault.id as FaultId);
+        const id = btn.dataset.faultId;
+        if (!id || !isFaultId(id)) return;
+        this.world.toggleFault(id);
         this.syncFaultButtons();
         this.onChange();
       });
@@ -77,32 +113,29 @@ export class Hud {
 
   syncFaultButtons(): void {
     for (const btn of this.faultButtons.querySelectorAll<HTMLButtonElement>(".fault-btn")) {
-      const id = btn.dataset.faultId as FaultId;
+      const id = btn.dataset.faultId;
+      if (!id || !isFaultId(id)) continue;
       btn.classList.toggle("active", this.world.state.faults[id]);
       btn.setAttribute("aria-pressed", String(this.world.state.faults[id]));
     }
   }
 
   render(t: Telemetry): void {
-    const rows: [string, string][] = [
-      ["Altitude", `${fmt(t.altitudeM, 0)} m`],
-      ["Radar", `${fmt(t.sensedAltitudeM, 0)} m`],
-      ["Range to site", `${fmt(t.rangeM, 0)} m`],
-      ["Vx / Vy", `${fmt(t.vx, 1)} / ${fmt(t.vy, 1)} m/s`],
-      ["Pitch", `${fmt(t.pitchDeg, 1)}°`],
-      ["Throttle", `${fmt(t.throttle * 100, 0)}%`],
-      ["Thrust", `${fmt(t.thrustN / 1000, 1)} kN`],
-      ["Fuel", `${fmt(t.fuelKg, 0)} kg`],
-      ["Slope", `${fmt(t.slopeDeg, 1)}°`],
-    ];
+    const values: Record<(typeof TELEMETRY_KEYS)[number], string> = {
+      Altitude: `${fmt(t.altitudeM, 0)} m`,
+      Radar: `${fmt(t.sensedAltitudeM, 0)} m`,
+      "Range to site": `${fmt(t.rangeM, 0)} m`,
+      "Vx / Vy": `${fmt(t.vx, 1)} / ${fmt(t.vy, 1)} m/s`,
+      Pitch: `${fmt(t.pitchDeg, 1)}°`,
+      Throttle: `${fmt(t.throttle * 100, 0)}%`,
+      Thrust: `${fmt(t.thrustN / 1000, 1)} kN`,
+      Fuel: `${fmt(t.fuelKg, 0)} kg`,
+      Slope: `${fmt(t.slopeDeg, 1)}°`,
+    };
 
-    this.telemetryGrid.replaceChildren();
-    for (const [k, v] of rows) {
-      const dt = document.createElement("dt");
-      dt.textContent = k;
-      const dd = document.createElement("dd");
-      dd.textContent = v;
-      this.telemetryGrid.append(dt, dd);
+    for (const key of TELEMETRY_KEYS) {
+      const node = this.valueNodes.get(key);
+      if (node) node.textContent = values[key];
     }
 
     this.phaseLine.textContent = t.phase;
@@ -113,6 +146,7 @@ export class Hud {
       this.alarmLine.textContent = `ALARM ${t.alarm}`;
     } else {
       this.alarmLine.hidden = true;
+      this.alarmLine.textContent = "";
     }
 
     this.clockText.textContent = `T+${fmt(t.timeSec, 1)}s`;

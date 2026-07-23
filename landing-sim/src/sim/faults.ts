@@ -28,6 +28,12 @@ export const FAULT_CATALOG: Omit<FaultState, "active">[] = [
   },
 ];
 
+const FAULT_IDS = new Set<string>(FAULT_CATALOG.map((f) => f.id));
+
+export function isFaultId(id: string): id is FaultId {
+  return FAULT_IDS.has(id);
+}
+
 export function emptyFaultFlags(): Record<FaultId, boolean> {
   return {
     engine_underthrust: false,
@@ -38,11 +44,13 @@ export function emptyFaultFlags(): Record<FaultId, boolean> {
   };
 }
 
-export function toggleFault(state: SimState, id: FaultId): void {
+export function toggleFault(state: SimState, id: string): boolean {
+  if (!isFaultId(id)) return false;
   state.faults[id] = !state.faults[id];
   if (id === "steep_slope") {
     applyTerrainFault(state);
   }
+  return true;
 }
 
 export function applyTerrainFault(state: SimState): void {

@@ -8,7 +8,8 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
-    sourcemap: true,
+    // Keep source maps out of production artifacts
+    sourcemap: false,
   },
   test: {
     environment: "node",

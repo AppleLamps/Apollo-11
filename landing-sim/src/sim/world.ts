@@ -7,14 +7,16 @@ import {
 } from "./faults";
 import { runGuidance, sensedAltitude } from "./guidance";
 import { applyPhysics, effectiveMaxThrust, totalMass } from "./physics";
+import { finiteOr, sanitizeDt } from "./safeMath";
 import type { FaultId, SimConfig, SimState, Telemetry } from "./types";
+import { validateConfig } from "./validateConfig";
 
 export class LandingWorld {
   readonly config: SimConfig;
   state: SimState;
 
   constructor(config: SimConfig = DEFAULT_CONFIG) {
-    this.config = config;
+    this.config = validateConfig(config);
     this.state = this.createInitialState();
   }
 
@@ -51,7 +53,17 @@ export class LandingWorld {
   }
 
   engage(): void {
-    if (this.state.phase === "LANDED" || this.state.phase === "CRASHED") {
+    // Any terminal or aborting flight must fully reset before re-engage.
+    // Mid-run Engage is ignored so we don't teleport guidance into a live trajectory.
+    if (this.state.running && this.state.phase !== "ABORT") {
+      return;
+    }
+    if (
+      this.state.phase === "LANDED" ||
+      this.state.phase === "CRASHED" ||
+      this.state.phase === "ABORT" ||
+      this.state.timeSec > 0
+    ) {
       this.reset(true);
     }
     this.state.running = true;
@@ -59,6 +71,7 @@ export class LandingWorld {
     this.state.phase = "BRAKING";
     this.state.outcome = null;
     this.state.alarm = null;
+    this.state.guidanceInhibitSec = 0;
   }
 
   togglePause(): void {
@@ -69,25 +82,32 @@ export class LandingWorld {
     this.state.paused = !this.state.paused;
   }
 
-  toggleFault(id: FaultId): void {
-    toggleFaultFlag(this.state, id);
+  toggleFault(id: string): boolean {
+    return toggleFaultFlag(this.state, id);
   }
 
   step(dt: number): void {
     if (!this.state.running || this.state.paused) return;
 
-    const capped = Math.min(dt, 0.05);
+    const capped = sanitizeDt(dt);
+    if (capped === null) return;
+
+    // Freeze terminal outcomes — landing detection cannot be bypassed by later steps
+    if (this.state.phase === "LANDED" || this.state.phase === "CRASHED") {
+      this.state.running = false;
+      return;
+    }
+
     updateTerrainUnderLander(this.state);
     runGuidance(this.state, this.config, capped);
     applyPhysics(this.state, this.config, capped);
-    this.state.timeSec += capped;
+    this.state.timeSec = finiteOr(this.state.timeSec, 0) + capped;
 
     if (this.state.phase === "ABORT" && this.state.y > 12000) {
       this.state.running = false;
       this.state.outcome = "Abort · climbing away from site";
     }
     if (this.state.fuelKg <= 0 && this.state.y > this.state.surfaceHeightM + 2 && this.state.vy < 0) {
-      // Fall to contact; physics will resolve
       this.state.throttle = 0;
     }
   }
@@ -96,23 +116,31 @@ export class LandingWorld {
     const s = this.state;
     const mass = totalMass(s, this.config);
     const thrust = s.fuelKg > 0 ? s.throttle * effectiveMaxThrust(s, this.config) : 0;
+    const fuelCap = this.config.fuelMassKg;
     return {
-      altitudeM: s.y - s.surfaceHeightM,
-      sensedAltitudeM: sensedAltitude(s, this.config),
-      rangeM: s.x,
-      vx: s.vx,
-      vy: s.vy,
-      fuelKg: s.fuelKg,
-      fuelFraction: s.fuelKg / this.config.fuelMassKg,
-      throttle: s.throttle,
-      thrustN: thrust,
-      pitchDeg: (s.pitch * 180) / Math.PI,
+      altitudeM: finiteOr(s.y - s.surfaceHeightM, 0),
+      sensedAltitudeM: finiteOr(sensedAltitude(s, this.config), 0),
+      rangeM: finiteOr(s.x, 0),
+      vx: finiteOr(s.vx, 0),
+      vy: finiteOr(s.vy, 0),
+      fuelKg: Math.max(0, finiteOr(s.fuelKg, 0)),
+      fuelFraction: clamp01(finiteOr(s.fuelKg, 0) / fuelCap),
+      throttle: clamp01(finiteOr(s.throttle, 0)),
+      thrustN: Math.max(0, finiteOr(thrust, 0)),
+      pitchDeg: finiteOr((s.pitch * 180) / Math.PI, 0),
       massKg: mass,
-      slopeDeg: (s.surfaceSlopeRad * 180) / Math.PI,
+      slopeDeg: finiteOr((s.surfaceSlopeRad * 180) / Math.PI, 0),
       phase: s.phase,
-      timeSec: s.timeSec,
+      timeSec: Math.max(0, finiteOr(s.timeSec, 0)),
       alarm: s.alarm,
       outcome: s.outcome,
     };
   }
 }
+
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value));
+}
+
+// Re-export for callers that typed toggleFault against FaultId
+export type { FaultId };

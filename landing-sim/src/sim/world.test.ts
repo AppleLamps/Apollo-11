@@ -54,4 +54,15 @@ describe("LandingWorld", () => {
     }
     expect(["LANDED", "CRASHED", "ABORT"]).toContain(world.state.phase);
   });
+
+  it("emits finite telemetry even at empty fuel", () => {
+    const world = new LandingWorld();
+    world.engage();
+    world.state.fuelKg = 0;
+    world.step(0.05);
+    const t = world.telemetry();
+    expect(Number.isFinite(t.fuelFraction)).toBe(true);
+    expect(Number.isFinite(t.thrustN)).toBe(true);
+    expect(t.fuelFraction).toBe(0);
+  });
 });
