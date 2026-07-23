@@ -8,7 +8,7 @@ import {
 import { runGuidance, sensedAltitude } from "./guidance";
 import { applyPhysics, effectiveMaxThrust, totalMass } from "./physics";
 import { finiteOr, sanitizeDt } from "./safeMath";
-import type { FaultId, SimConfig, SimState, Telemetry } from "./types";
+import type { FaultId, RenderSnapshot, SimConfig, SimState, Telemetry } from "./types";
 import { validateConfig } from "./validateConfig";
 
 export class LandingWorld {
@@ -135,6 +135,20 @@ export class LandingWorld {
       timeSec: Math.max(0, finiteOr(s.timeSec, 0)),
       alarm: s.alarm,
       outcome: s.outcome,
+    };
+  }
+
+  renderSnapshot(telemetry: Telemetry = this.telemetry()): Readonly<RenderSnapshot> {
+    const s = this.state;
+    return {
+      x: finiteOr(s.x, 0),
+      y: finiteOr(s.y, 0),
+      pitch: finiteOr(s.pitch, 0),
+      fuelRemaining: s.fuelKg > 0,
+      surfaceHeightM: finiteOr(s.surfaceHeightM, 0),
+      surfaceSlopeRad: finiteOr(s.surfaceSlopeRad, 0),
+      phase: s.phase,
+      telemetry,
     };
   }
 }

@@ -1,8 +1,12 @@
 import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import type { Telemetry } from "../sim/types";
-import type { LandingWorld } from "../sim/world";
-import { isCameraMode, saneCameraScalar, type CameraMode } from "./cameraRig";
+import { CameraController } from "../rendering/CameraController";
+import { EngineEffects } from "../rendering/effects/EngineEffects";
+import { createLandingSite } from "../rendering/environment/createLandingSite";
+import { setupLighting } from "../rendering/environment/setupLighting";
+import { ResourceTracker } from "../rendering/ResourceTracker";
+import { createLander } from "../rendering/vehicles/createLander";
+import type { RenderSnapshot } from "../sim/types";
+import { saneCameraScalar } from "./cameraRig";
 
 const METERS_TO_SCENE = 0.01;
 
@@ -10,11 +14,9 @@ export class LandingScene {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene: THREE.Scene;
   readonly camera: THREE.PerspectiveCamera;
-  private controls: OrbitControls;
+  private cameraController: CameraController;
   private lander: THREE.Group;
-  private plumeInner: THREE.Mesh;
-  private plumeOuter: THREE.Mesh;
-  private dust: THREE.Points;
+  private engineEffects: EngineEffects;
   private starsNear: THREE.Points;
   private starsFar: THREE.Points;
   private milkyWay: THREE.Mesh;
@@ -24,14 +26,10 @@ export class LandingScene {
   private targetMarker: THREE.Group;
   private landingBeacon: THREE.Mesh | null;
   private clock = new THREE.Clock();
-  private cameraMode: CameraMode = "chase";
   private contextLost = false;
-  private readonly disposables: { dispose: () => void }[] = [];
-  private readonly camTarget = new THREE.Vector3();
-  private readonly lookAtTarget = new THREE.Vector3();
+  private readonly resources = new ResourceTracker();
   private readonly landerWorld = new THREE.Vector3();
   private readonly padWorld = new THREE.Vector3(0, 0.2, 0);
-  private readonly scratchOffset = new THREE.Vector3();
   private readonly onResize = (): void => {
     this.resize();
   };
@@ -70,17 +68,9 @@ export class LandingScene {
       8000,
     );
 
-    this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
-    this.controls.maxPolarAngle = Math.PI * 0.48;
-    this.controls.minDistance = 6;
-    this.controls.maxDistance = 220;
-    this.controls.enabled = false;
-    this.controls.enablePan = false;
-    this.controls.enableZoom = true;
+    this.cameraController = new CameraController(this.camera, canvas);
 
-    this.setupLights();
+    setupLighting(this.scene);
     this.starsFar = this.makeStars(4200, 900, 2200, 0.55, 0xb8c4d4);
     this.starsNear = this.makeStars(900, 380, 900, 1.35, 0xf2f6ff);
     this.scene.add(this.starsFar, this.starsNear);
@@ -94,39 +84,17 @@ export class LandingScene {
     this.farRim = this.makeFarRim();
     this.scene.add(this.farRim);
 
-    this.targetMarker = this.makeLandingSite();
+    this.targetMarker = createLandingSite();
     this.scene.add(this.targetMarker);
     const beacon = this.targetMarker.getObjectByName("beacon");
     this.landingBeacon = beacon instanceof THREE.Mesh ? beacon : null;
 
-    this.lander = this.makeLander();
+    this.lander = createLander();
     this.scene.add(this.lander);
 
-    const plumeMat = new THREE.MeshBasicMaterial({
-      color: 0xffc078,
-      transparent: true,
-      opacity: 0.55,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-    this.plumeInner = new THREE.Mesh(new THREE.ConeGeometry(0.22, 1.6, 18, 1, true), plumeMat);
-    this.plumeInner.position.y = -1.35;
-    this.plumeInner.rotation.x = Math.PI;
-    this.lander.add(this.plumeInner);
-
-    this.plumeOuter = new THREE.Mesh(
-      new THREE.ConeGeometry(0.48, 2.6, 20, 1, true),
-      plumeMat.clone(),
-    );
-    (this.plumeOuter.material as THREE.MeshBasicMaterial).color.setHex(0xff8a4a);
-    (this.plumeOuter.material as THREE.MeshBasicMaterial).opacity = 0.28;
-    this.plumeOuter.position.y = -1.7;
-    this.plumeOuter.rotation.x = Math.PI;
-    this.lander.add(this.plumeOuter);
-
-    this.dust = this.makeDust();
-    this.scene.add(this.dust);
+    this.engineEffects = new EngineEffects(this.lander, this.resources);
+    this.scene.add(this.engineEffects.dust);
+    this.resources.trackObject(this.scene);
 
     window.addEventListener("resize", this.onResize);
     canvas.addEventListener("webglcontextlost", this.onContextLost, false);
@@ -135,44 +103,19 @@ export class LandingScene {
   }
 
   setCameraMode(mode: string): boolean {
-    if (!isCameraMode(mode)) return false;
-    const prev = this.cameraMode;
-    this.cameraMode = mode;
-    this.controls.enabled = mode === "orbit";
-
-    if (mode !== "orbit" && prev === "orbit") {
-      // Disable first so any in-flight pointer gesture stops affecting the camera
-      this.controls.enabled = false;
-    }
-
-    if (mode === "orbit") {
-      this.controls.target.copy(this.landerWorld);
-      this.scratchOffset.copy(this.camera.position).sub(this.landerWorld);
-      if (this.scratchOffset.lengthSq() < 16) {
-        this.camera.position.set(
-          this.landerWorld.x - 28,
-          this.landerWorld.y + 16,
-          this.landerWorld.z + 34,
-        );
-      }
-      this.controls.update();
-    }
-    return true;
+    return this.cameraController.setMode(mode, this.landerWorld);
   }
 
-  getCameraMode(): CameraMode {
-    return this.cameraMode;
+  getCameraMode() {
+    return this.cameraController.getMode();
   }
 
   dispose(): void {
     window.removeEventListener("resize", this.onResize);
     this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
-    this.controls.dispose();
-    for (const item of this.disposables) {
-      item.dispose();
-    }
-    this.disposables.length = 0;
+    this.cameraController.dispose();
+    this.resources.dispose();
     this.renderer.dispose();
   }
 
@@ -187,21 +130,22 @@ export class LandingScene {
     }
   }
 
-  sync(world: LandingWorld, telemetry: Telemetry): void {
+  render(snapshot: Readonly<RenderSnapshot>): void {
     if (this.contextLost) return;
 
     const t = this.clock.getElapsedTime();
-    const x = saneCameraScalar(world.state.x, 0) * METERS_TO_SCENE;
-    const y = saneCameraScalar(world.state.y, 100) * METERS_TO_SCENE;
-    const surfaceY = saneCameraScalar(world.state.surfaceHeightM, 0) * METERS_TO_SCENE;
-    const slope = saneCameraScalar(world.state.surfaceSlopeRad, 0);
+    const { telemetry } = snapshot;
+    const x = saneCameraScalar(snapshot.x, 0) * METERS_TO_SCENE;
+    const y = saneCameraScalar(snapshot.y, 100) * METERS_TO_SCENE;
+    const surfaceY = saneCameraScalar(snapshot.surfaceHeightM, 0) * METERS_TO_SCENE;
+    const slope = saneCameraScalar(snapshot.surfaceSlopeRad, 0);
 
     this.landerWorld.set(x, y, 0);
     this.padWorld.set(0, surfaceY + 0.15, 0);
 
     this.lander.position.copy(this.landerWorld);
-    this.lander.rotation.z = -world.state.pitch;
-    if (world.state.phase === "CRASHED") {
+    this.lander.rotation.z = -snapshot.pitch;
+    if (snapshot.phase === "CRASHED") {
       this.lander.rotation.x = 0.85;
       this.lander.rotation.z += 0.55;
       this.lander.rotation.y = 0.4;
@@ -210,19 +154,9 @@ export class LandingScene {
       this.lander.rotation.y = Math.sin(t * 0.15) * 0.02;
     }
 
-    const thrust = telemetry.throttle;
-    const plumeOn = thrust > 0.05 && world.state.fuelKg > 0 && world.state.phase !== "LANDED";
-    this.plumeInner.visible = plumeOn;
-    this.plumeOuter.visible = plumeOn;
-    if (plumeOn) {
-      const flicker = 0.92 + Math.sin(t * 40) * 0.08;
-      this.plumeInner.scale.set(0.7 + thrust * 0.5, (0.8 + thrust * 1.6) * flicker, 0.7 + thrust * 0.5);
-      this.plumeOuter.scale.set(0.9 + thrust, (1 + thrust * 1.8) * flicker, 0.9 + thrust);
-      (this.plumeInner.material as THREE.MeshBasicMaterial).opacity = 0.3 + thrust * 0.5;
-      (this.plumeOuter.material as THREE.MeshBasicMaterial).opacity = 0.12 + thrust * 0.28;
-    }
+    this.engineEffects.update(snapshot, t, x, surfaceY);
 
-    this.updateCamera(telemetry, t);
+    this.cameraController.update(telemetry, t, this.landerWorld, this.padWorld, METERS_TO_SCENE);
 
     this.terrain.rotation.z = -slope * 0.12;
     this.farRim.rotation.z = -slope * 0.05;
@@ -234,13 +168,6 @@ export class LandingScene {
       this.landingBeacon.scale.setScalar(1 + Math.sin(t * 2.4) * 0.08);
     }
 
-    const alt = Math.max(telemetry.altitudeM, 1);
-    const dustMat = this.dust.material as THREE.PointsMaterial;
-    const near = alt < 110 && thrust > 0.15;
-    dustMat.opacity = near ? THREE.MathUtils.clamp((110 - alt) / 110, 0, 0.85) * thrust : 0;
-    this.dust.position.set(x, surfaceY + 0.35, 0);
-    this.dust.rotation.y = t * 0.55;
-
     this.starsNear.rotation.y = t * 0.0035;
     this.starsFar.rotation.y = t * 0.0012;
     this.milkyWay.rotation.z = t * 0.0008;
@@ -249,86 +176,8 @@ export class LandingScene {
     this.renderer.render(this.scene, this.camera);
   }
 
-  private updateCamera(telemetry: Telemetry, t: number): void {
-    const x = this.landerWorld.x;
-    const y = this.landerWorld.y;
-    const alt = Math.max(saneCameraScalar(telemetry.altitudeM, 100), 1);
-
-    if (this.cameraMode === "orbit") {
-      if (!Number.isFinite(this.landerWorld.x) || !Number.isFinite(this.landerWorld.y)) return;
-      this.controls.target.lerp(this.landerWorld, 0.12);
-      this.controls.update();
-      return;
-    }
-
-    if (this.cameraMode === "chase") {
-      const camDist = THREE.MathUtils.clamp(16 + alt * METERS_TO_SCENE * 0.5, 18, 130);
-      const camHeight = THREE.MathUtils.clamp(9 + alt * METERS_TO_SCENE * 0.22, 10, 62);
-      this.camTarget.set(x - camDist * 0.55, y + camHeight * 0.42, camDist * 0.95);
-      this.lookAtTarget.set(x, y + 1.2, 0);
-    } else if (this.cameraMode === "side") {
-      const dist = THREE.MathUtils.clamp(22 + alt * METERS_TO_SCENE * 0.35, 20, 90);
-      this.camTarget.set(x, y + dist * 0.18, dist);
-      this.lookAtTarget.set(x, y + 0.8, 0);
-    } else if (this.cameraMode === "pad") {
-      this.camTarget.set(
-        Math.sin(t * 0.05) * 4,
-        Math.max(2.2, this.padWorld.y + 2.4),
-        14 + Math.cos(t * 0.05) * 2,
-      );
-      this.lookAtTarget.set(x, y + 0.5, 0);
-    } else {
-      // high (default)
-      const dist = THREE.MathUtils.clamp(30 + alt * METERS_TO_SCENE * 0.4, 28, 140);
-      this.camTarget.set(x + dist * 0.15, y + dist * 0.85, dist * 0.35);
-      this.lookAtTarget.set(x, Math.max(0.5, y - 4), 0);
-    }
-
-    if (
-      !Number.isFinite(this.camTarget.x) ||
-      !Number.isFinite(this.camTarget.y) ||
-      !Number.isFinite(this.camTarget.z)
-    ) {
-      return;
-    }
-
-    const lerp = this.cameraMode === "pad" ? 0.04 : 0.07;
-    this.camera.position.lerp(this.camTarget, lerp);
-    this.camera.lookAt(this.lookAtTarget);
-  }
-
-  private setupLights(): void {
-    const hemi = new THREE.HemisphereLight(0xc9d6e6, 0x3d342c, 0.42);
-    this.scene.add(hemi);
-
-    const sun = new THREE.DirectionalLight(0xffe6c8, 2.1);
-    sun.position.set(-120, 160, 70);
-    sun.castShadow = true;
-    // 2048 shadow maps can OOM / lose context on low-end GPUs
-    const lowPower = isLowPowerDevice();
-    const mapSize = lowPower ? 512 : 1024;
-    sun.shadow.mapSize.set(mapSize, mapSize);
-    sun.shadow.camera.near = 10;
-    sun.shadow.camera.far = 400;
-    sun.shadow.camera.left = -80;
-    sun.shadow.camera.right = 80;
-    sun.shadow.camera.top = 80;
-    sun.shadow.camera.bottom = -80;
-    sun.shadow.bias = -0.0002;
-    this.scene.add(sun);
-
-    const fill = new THREE.DirectionalLight(0x7f9bb8, 0.35);
-    fill.position.set(60, 40, -80);
-    this.scene.add(fill);
-
-    const rim = new THREE.DirectionalLight(0xffd09a, 0.45);
-    rim.position.set(40, 20, 100);
-    this.scene.add(rim);
-  }
-
   private track<T extends { dispose: () => void }>(resource: T): T {
-    this.disposables.push(resource);
-    return resource;
+    return this.resources.track(resource);
   }
 
   private makeStars(
@@ -562,213 +411,4 @@ export class LandingScene {
     return mesh;
   }
 
-  private makeLandingSite(): THREE.Group {
-    const g = new THREE.Group();
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(2.2, 2.55, 64),
-      new THREE.MeshBasicMaterial({
-        color: 0xd0a35a,
-        transparent: true,
-        opacity: 0.7,
-        side: THREE.DoubleSide,
-      }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.08;
-    g.add(ring);
-
-    const cross = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.12, 3.2),
-      new THREE.MeshBasicMaterial({
-        color: 0xe7e0d4,
-        transparent: true,
-        opacity: 0.35,
-        side: THREE.DoubleSide,
-      }),
-    );
-    cross.rotation.x = -Math.PI / 2;
-    cross.position.y = 0.09;
-    g.add(cross);
-    const cross2 = cross.clone();
-    cross2.rotation.z = Math.PI / 2;
-    g.add(cross2);
-
-    const beacon = new THREE.Mesh(
-      new THREE.CircleGeometry(0.55, 32),
-      new THREE.MeshBasicMaterial({
-        color: 0x7eb6c9,
-        transparent: true,
-        opacity: 0.5,
-        side: THREE.DoubleSide,
-      }),
-    );
-    beacon.name = "beacon";
-    beacon.rotation.x = -Math.PI / 2;
-    beacon.position.y = 0.1;
-    g.add(beacon);
-    return g;
-  }
-
-  private makeLander(): THREE.Group {
-    const g = new THREE.Group();
-    const body = new THREE.MeshStandardMaterial({
-      color: 0xe4ddd0,
-      metalness: 0.4,
-      roughness: 0.4,
-    });
-    const graphite = new THREE.MeshStandardMaterial({
-      color: 0x2c333a,
-      metalness: 0.55,
-      roughness: 0.45,
-    });
-    const foil = new THREE.MeshStandardMaterial({
-      color: 0xc49a4a,
-      metalness: 0.85,
-      roughness: 0.28,
-      emissive: 0x3a2a10,
-      emissiveIntensity: 0.12,
-    });
-    const stripe = new THREE.MeshStandardMaterial({
-      color: 0x7a2e2e,
-      metalness: 0.2,
-      roughness: 0.6,
-    });
-
-    // Ascent stage
-    const ascent = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.05, 1.15), body);
-    ascent.position.y = 1.15;
-    ascent.castShadow = true;
-    g.add(ascent);
-    const hatch = new THREE.Mesh(new THREE.CircleGeometry(0.22, 20), graphite);
-    hatch.position.set(0, 1.15, 0.58);
-    g.add(hatch);
-    const window = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.28, 0.2),
-      new THREE.MeshStandardMaterial({
-        color: 0x88c4e0,
-        emissive: 0x224455,
-        emissiveIntensity: 0.4,
-        metalness: 0.2,
-        roughness: 0.2,
-      }),
-    );
-    window.position.set(0.35, 1.35, 0.581);
-    g.add(window);
-
-    // Antenna
-    const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8), body);
-    antenna.position.set(-0.35, 1.95, -0.2);
-    g.add(antenna);
-    const dish = new THREE.Mesh(new THREE.SphereGeometry(0.18, 12, 8, 0, Math.PI), foil);
-    dish.position.set(-0.35, 2.35, -0.2);
-    dish.rotation.x = Math.PI;
-    g.add(dish);
-
-    // Descent stage octagon-ish
-    const descent = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.35, 0.85, 8), graphite);
-    descent.position.y = 0.35;
-    descent.castShadow = true;
-    g.add(descent);
-
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.04), foil);
-      panel.position.set(Math.cos(a) * 1.15, 0.35, Math.sin(a) * 1.15);
-      panel.rotation.y = -a + Math.PI / 2;
-      g.add(panel);
-    }
-
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.16, 0.08, 8), stripe);
-    band.position.y = 0.55;
-    g.add(band);
-
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.55, 0.7, 16), foil);
-    nozzle.position.y = -0.35;
-    g.add(nozzle);
-    const nozzleLip = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.04, 8, 24), body);
-    nozzleLip.rotation.x = Math.PI / 2;
-    nozzleLip.position.y = -0.7;
-    g.add(nozzleLip);
-
-    // RCS quads
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2 + Math.PI / 4;
-      const rcs = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.22), graphite);
-      rcs.position.set(Math.cos(a) * 0.85, 1.35, Math.sin(a) * 0.85);
-      g.add(rcs);
-    }
-
-    // Landing legs
-    for (let i = 0; i < 4; i++) {
-      const angle = (i * Math.PI) / 2 + Math.PI / 4;
-      const legRoot = new THREE.Group();
-      legRoot.position.set(Math.cos(angle) * 0.95, 0.2, Math.sin(angle) * 0.95);
-      legRoot.rotation.y = -angle;
-
-      const primary = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.55, 8), body);
-      primary.position.set(0.55, -0.55, 0);
-      primary.rotation.z = 0.55;
-      primary.castShadow = true;
-      legRoot.add(primary);
-
-      const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.95, 6), body);
-      strut.position.set(0.25, -0.15, 0.2);
-      strut.rotation.z = 0.35;
-      strut.rotation.x = -0.4;
-      legRoot.add(strut);
-
-      const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.08, 14), foil);
-      pad.position.set(1.05, -1.15, 0);
-      pad.castShadow = true;
-      pad.receiveShadow = true;
-      legRoot.add(pad);
-
-      const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.45, 6), body);
-      probe.position.set(1.05, -1.4, 0);
-      legRoot.add(probe);
-
-      g.add(legRoot);
-    }
-
-    g.traverse((obj) => {
-      if (obj instanceof THREE.Mesh) {
-        obj.castShadow = true;
-      }
-    });
-    return g;
-  }
-
-  private makeDust(): THREE.Points {
-    const count = 700;
-    const positions = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const r = Math.random() * 12;
-      positions[i * 3] = Math.cos(a) * r;
-      positions[i * 3 + 1] = Math.random() * 2.2;
-      positions[i * 3 + 2] = Math.sin(a) * r;
-    }
-    const geo = this.track(new THREE.BufferGeometry());
-    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    return new THREE.Points(
-      geo,
-      this.track(
-        new THREE.PointsMaterial({
-          color: 0xd2c3a8,
-          size: 0.42,
-          transparent: true,
-          opacity: 0,
-          depthWrite: false,
-        }),
-      ),
-    );
-  }
-}
-
-function isLowPowerDevice(): boolean {
-  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
-  const smallViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches;
-  const lowMem = typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4;
-  const lowCpu = typeof nav.hardwareConcurrency === "number" && nav.hardwareConcurrency <= 4;
-  return smallViewport || lowMem || lowCpu;
 }

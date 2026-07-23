@@ -64,6 +64,18 @@ export interface Telemetry {
   outcome: string | null;
 }
 
+/** Immutable, presentation-focused state consumed by the Three.js renderer. */
+export interface RenderSnapshot {
+  x: number;
+  y: number;
+  pitch: number;
+  fuelRemaining: boolean;
+  surfaceHeightM: number;
+  surfaceSlopeRad: number;
+  phase: FlightPhase;
+  telemetry: Telemetry;
+}
+
 export interface SimState {
   running: boolean;
   paused: boolean;

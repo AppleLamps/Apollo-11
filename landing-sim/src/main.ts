@@ -33,7 +33,7 @@ function frame(now: number): void {
   }
   const telemetry = world.telemetry();
   hud.render(telemetry);
-  scene.sync(world, telemetry);
+  scene.render(world.renderSnapshot(telemetry));
 
   raf = requestAnimationFrame(frame);
 }

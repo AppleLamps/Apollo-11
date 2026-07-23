@@ -1,43 +1,31 @@
-import { FAULT_CATALOG, isFaultId } from "../sim/faults";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
 import { CAMERA_MODES, isCameraMode, type CameraMode } from "./cameraRig";
+import { FaultPanel } from "./FaultPanel";
 import type { LandingScene } from "./scene";
+import { TelemetryPanel } from "./TelemetryPanel";
 
 function fmt(n: number, digits = 1): string {
   if (!Number.isFinite(n)) return "—";
   return n.toFixed(digits);
 }
 
-const TELEMETRY_KEYS = [
-  "Altitude",
-  "Radar",
-  "Range to site",
-  "Vx / Vy",
-  "Pitch",
-  "Throttle",
-  "Thrust",
-  "Fuel",
-  "Slope",
-] as const;
-
 /** Minimum gap between polite status announcements (ms). */
 const STATUS_ANNOUNCE_MS = 1600;
 
 export class Hud {
-  private telemetryGrid: HTMLDListElement;
+  private telemetryPanel: TelemetryPanel;
+  private faultPanel: FaultPanel;
   private phaseLine: HTMLElement;
   private alarmLine: HTMLElement;
   private statusText: HTMLElement;
   private clockText: HTMLElement;
-  private faultButtons: HTMLElement;
   private announce: HTMLElement;
   private btnStart: HTMLButtonElement;
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
   private cameraModes: HTMLElement;
   private cameraHint: HTMLElement;
-  private valueNodes = new Map<string, HTMLElement>();
   private lastAnnounceKey = "";
   private lastAnnounceAt = 0;
   private readonly onKeyDown = (event: KeyboardEvent): void => {
@@ -68,12 +56,11 @@ export class Hud {
     private scene: LandingScene,
     private onChange: () => void,
   ) {
-    this.telemetryGrid = el("telemetry-grid") as HTMLDListElement;
+    this.telemetryPanel = new TelemetryPanel(el("telemetry-grid") as HTMLDListElement);
     this.phaseLine = el("phase-line");
     this.alarmLine = el("alarm-line");
     this.statusText = el("status-text");
     this.clockText = el("clock-text");
-    this.faultButtons = el("fault-buttons");
     this.announce = el("a11y-announce");
     this.btnStart = el("btn-start") as HTMLButtonElement;
     this.btnReset = el("btn-reset") as HTMLButtonElement;
@@ -81,51 +68,10 @@ export class Hud {
     this.cameraModes = el("camera-modes");
     this.cameraHint = el("camera-hint");
 
-    this.mountTelemetrySkeleton();
-    this.mountFaults();
+    this.faultPanel = new FaultPanel(el("fault-buttons"), world, onChange);
     this.mountCameraModes();
     this.bindControls();
     this.render(world.telemetry());
-  }
-
-  private mountTelemetrySkeleton(): void {
-    this.telemetryGrid.replaceChildren();
-    this.valueNodes.clear();
-    for (const key of TELEMETRY_KEYS) {
-      const dt = document.createElement("dt");
-      dt.textContent = key;
-      const dd = document.createElement("dd");
-      dd.textContent = "—";
-      this.telemetryGrid.append(dt, dd);
-      this.valueNodes.set(key, dd);
-    }
-  }
-
-  private mountFaults(): void {
-    this.faultButtons.replaceChildren();
-    for (const fault of FAULT_CATALOG) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "fault-btn";
-      btn.dataset.faultId = fault.id;
-      btn.title = fault.description;
-
-      const label = document.createElement("span");
-      label.textContent = fault.label;
-      const detail = document.createElement("small");
-      detail.textContent = fault.description;
-      btn.append(label, detail);
-
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.faultId;
-        if (!id || !isFaultId(id)) return;
-        this.world.toggleFault(id);
-        this.syncFaultButtons();
-        this.onChange();
-      });
-      this.faultButtons.append(btn);
-    }
-    this.syncFaultButtons();
   }
 
   private mountCameraModes(): void {
@@ -192,32 +138,8 @@ export class Hud {
     window.removeEventListener("keydown", this.onKeyDown);
   }
 
-  syncFaultButtons(): void {
-    for (const btn of this.faultButtons.querySelectorAll<HTMLButtonElement>(".fault-btn")) {
-      const id = btn.dataset.faultId;
-      if (!id || !isFaultId(id)) continue;
-      btn.classList.toggle("active", this.world.state.faults[id]);
-      btn.setAttribute("aria-pressed", String(this.world.state.faults[id]));
-    }
-  }
-
   render(t: Telemetry): void {
-    const values: Record<(typeof TELEMETRY_KEYS)[number], string> = {
-      Altitude: `${fmt(t.altitudeM, 0)} m`,
-      Radar: `${fmt(t.sensedAltitudeM, 0)} m`,
-      "Range to site": `${fmt(t.rangeM, 0)} m`,
-      "Vx / Vy": `${fmt(t.vx, 1)} / ${fmt(t.vy, 1)} m/s`,
-      Pitch: `${fmt(t.pitchDeg, 1)}°`,
-      Throttle: `${fmt(t.throttle * 100, 0)}%`,
-      Thrust: `${fmt(t.thrustN / 1000, 1)} kN`,
-      Fuel: `${fmt(t.fuelKg, 0)} kg`,
-      Slope: `${fmt(t.slopeDeg, 1)}°`,
-    };
-
-    for (const key of TELEMETRY_KEYS) {
-      const node = this.valueNodes.get(key);
-      if (node) node.textContent = values[key];
-    }
+    this.telemetryPanel.render(t);
 
     this.phaseLine.textContent = t.phase;
     this.phaseLine.dataset.phase = t.phase;
@@ -237,7 +159,7 @@ export class Hud {
     this.maybeAnnounce(t, status);
 
     this.btnPause.disabled = !this.world.state.running;
-    this.syncFaultButtons();
+    this.faultPanel.render();
   }
 
   private statusMessage(t: Telemetry): string {
