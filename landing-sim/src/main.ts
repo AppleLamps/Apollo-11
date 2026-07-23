@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-mono/latin-400.css";
 import "@fontsource/ibm-plex-mono/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./style.css";
+import { AudioController } from "./audio/AudioController";
 import { sanitizeDt } from "./sim/safeMath";
 import { LandingWorld } from "./sim/world";
 import { Hud } from "./ui/hud";
@@ -17,7 +18,8 @@ if (!(canvas instanceof HTMLCanvasElement)) {
 
 const world = new LandingWorld();
 const scene = new LandingScene(canvas);
-const hud = new Hud(world, scene, () => hud.render(world.telemetry()));
+const audio = new AudioController();
+const hud = new Hud(world, scene, audio, () => hud.render(world.telemetry()));
 
 let last = performance.now();
 let raf = 0;
@@ -34,6 +36,7 @@ function frame(now: number): void {
   const telemetry = world.telemetry();
   hud.render(telemetry);
   scene.render(world.renderSnapshot(telemetry));
+  audio.update(telemetry, world.state.running, world.state.paused);
 
   raf = requestAnimationFrame(frame);
 }
@@ -44,4 +47,5 @@ window.addEventListener("pagehide", () => {
   cancelAnimationFrame(raf);
   hud.dispose();
   scene.dispose();
+  audio.dispose();
 });

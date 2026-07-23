@@ -1,3 +1,4 @@
+import type { AudioController } from "../audio/AudioController";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
 import { CAMERA_MODES, isCameraMode, type CameraMode } from "./cameraRig";
@@ -24,6 +25,7 @@ export class Hud {
   private btnStart: HTMLButtonElement;
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
+  private btnSound: HTMLButtonElement;
   private cameraModes: HTMLElement;
   private cameraHint: HTMLElement;
   private lastAnnounceKey = "";
@@ -54,6 +56,7 @@ export class Hud {
   constructor(
     private world: LandingWorld,
     private scene: LandingScene,
+    private audio: AudioController,
     private onChange: () => void,
   ) {
     this.telemetryPanel = new TelemetryPanel(el("telemetry-grid") as HTMLDListElement);
@@ -65,6 +68,7 @@ export class Hud {
     this.btnStart = el("btn-start") as HTMLButtonElement;
     this.btnReset = el("btn-reset") as HTMLButtonElement;
     this.btnPause = el("btn-pause") as HTMLButtonElement;
+    this.btnSound = el("btn-sound") as HTMLButtonElement;
     this.cameraModes = el("camera-modes");
     this.cameraHint = el("camera-hint");
 
@@ -114,6 +118,7 @@ export class Hud {
 
   private bindControls(): void {
     this.btnStart.addEventListener("click", () => {
+      void this.audio.activate();
       this.world.engage();
       this.btnPause.disabled = false;
       this.btnPause.textContent = "Pause";
@@ -121,6 +126,7 @@ export class Hud {
     });
     this.btnReset.addEventListener("click", () => {
       this.world.reset(true);
+      this.audio.reset();
       this.btnPause.disabled = true;
       this.btnPause.textContent = "Pause";
       this.onChange();
@@ -130,8 +136,19 @@ export class Hud {
       this.btnPause.textContent = this.world.state.paused ? "Resume" : "Pause";
       this.onChange();
     });
+    this.btnSound.addEventListener("click", () => {
+      void this.audio.toggle().then(() => this.syncSoundButton());
+    });
 
     window.addEventListener("keydown", this.onKeyDown);
+  }
+
+  private syncSoundButton(): void {
+    const enabled = this.audio.isEnabled();
+    this.btnSound.textContent = enabled ? "Sound on" : "Sound off";
+    this.btnSound.classList.toggle("active", enabled);
+    this.btnSound.setAttribute("aria-pressed", String(enabled));
+    this.btnSound.title = enabled ? "Mute simulator audio" : "Enable simulator audio";
   }
 
   dispose(): void {

@@ -402,8 +402,8 @@ body {
     width: calc(100% - 2rem);
     left: 1rem;
     right: 1rem;
-    bottom: 7.4rem;
-    max-height: 26vh;
+    bottom: 11rem;
+    max-height: 22vh;
   }
 
   .brand-mark {

@@ -1,27 +1,32 @@
 import * as THREE from "three";
 
 export function setupLighting(scene: THREE.Scene): void {
-  scene.add(new THREE.HemisphereLight(0xc9d6e6, 0x3d342c, 0.42));
+  // The Moon has no atmosphere: keep ambient light restrained so terrain
+  // relief is defined primarily by the hard, low-angle sun.
+  scene.add(new THREE.HemisphereLight(0x9bacbd, 0x171411, 0.2));
 
-  const sun = new THREE.DirectionalLight(0xffe6c8, 2.1);
-  sun.position.set(-120, 160, 70);
+  const sun = new THREE.DirectionalLight(0xfff1d2, 3.25);
+  sun.name = "sun-light";
+  sun.position.set(-160, 115, 85);
   sun.castShadow = true;
-  const mapSize = isLowPowerDevice() ? 512 : 1024;
+  const mapSize = isLowPowerDevice() ? 1024 : 2048;
   sun.shadow.mapSize.set(mapSize, mapSize);
-  sun.shadow.camera.near = 10;
-  sun.shadow.camera.far = 400;
-  sun.shadow.camera.left = -80;
-  sun.shadow.camera.right = 80;
-  sun.shadow.camera.top = 80;
-  sun.shadow.camera.bottom = -80;
-  sun.shadow.bias = -0.0002;
-  scene.add(sun);
+  sun.shadow.camera.near = 1;
+  sun.shadow.camera.far = 420;
+  sun.shadow.camera.left = -95;
+  sun.shadow.camera.right = 95;
+  sun.shadow.camera.top = 95;
+  sun.shadow.camera.bottom = -95;
+  sun.shadow.bias = -0.00008;
+  sun.shadow.normalBias = 0.035;
+  sun.shadow.radius = 2;
+  scene.add(sun, sun.target);
 
-  const fill = new THREE.DirectionalLight(0x7f9bb8, 0.35);
+  const fill = new THREE.DirectionalLight(0x6682a3, 0.16);
   fill.position.set(60, 40, -80);
   scene.add(fill);
 
-  const rim = new THREE.DirectionalLight(0xffd09a, 0.45);
+  const rim = new THREE.DirectionalLight(0xffc477, 0.22);
   rim.position.set(40, 20, 100);
   scene.add(rim);
 }

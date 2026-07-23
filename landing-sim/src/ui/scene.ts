@@ -20,7 +20,8 @@ export class LandingScene {
   private starsNear: THREE.Points;
   private starsFar: THREE.Points;
   private milkyWay: THREE.Mesh;
-  private earth: THREE.Mesh;
+  private earth: THREE.Group;
+  private sun: THREE.Group;
   private terrain: THREE.Mesh;
   private farRim: THREE.Mesh;
   private targetMarker: THREE.Group;
@@ -53,13 +54,13 @@ export class LandingScene {
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.14;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.setClearColor(0x020308, 1);
 
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x12151c, 0.00135);
+    this.scene.fog = new THREE.Fog(0x030408, 260, 980);
 
     this.camera = new THREE.PerspectiveCamera(
       52,
@@ -71,13 +72,15 @@ export class LandingScene {
     this.cameraController = new CameraController(this.camera, canvas);
 
     setupLighting(this.scene);
-    this.starsFar = this.makeStars(4200, 900, 2200, 0.55, 0xb8c4d4);
-    this.starsNear = this.makeStars(900, 380, 900, 1.35, 0xf2f6ff);
+    this.starsFar = this.makeStars(5200, 900, 2400, 0.72, 0xaebbd0);
+    this.starsNear = this.makeStars(1200, 380, 980, 1.55, 0xf4f7ff);
     this.scene.add(this.starsFar, this.starsNear);
     this.milkyWay = this.makeMilkyWay();
     this.scene.add(this.milkyWay);
     this.earth = this.makeEarth();
     this.scene.add(this.earth);
+    this.sun = this.makeSun();
+    this.scene.add(this.sun);
 
     this.terrain = this.makeTerrain();
     this.scene.add(this.terrain);
@@ -172,6 +175,7 @@ export class LandingScene {
     this.starsFar.rotation.y = t * 0.0012;
     this.milkyWay.rotation.z = t * 0.0008;
     this.earth.rotation.y = t * 0.02;
+    this.sun.rotation.z = -t * 0.002;
 
     this.renderer.render(this.scene, this.camera);
   }
@@ -214,7 +218,8 @@ export class LandingScene {
           transparent: true,
           opacity: 0.95,
           vertexColors: true,
-          depthWrite: false,
+            depthWrite: false,
+            fog: false,
         }),
       ),
     );
@@ -258,51 +263,138 @@ export class LandingScene {
     return mesh;
   }
 
-  private makeEarth(): THREE.Mesh {
+  private makeEarth(): THREE.Group {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
     canvas.height = 128;
     const ctx = canvas.getContext("2d");
     if (ctx) {
       const g = ctx.createLinearGradient(0, 0, 256, 128);
-      g.addColorStop(0, "#1a3a6e");
-      g.addColorStop(0.35, "#2f6f4a");
-      g.addColorStop(0.55, "#245a8c");
-      g.addColorStop(0.75, "#3d7a52");
-      g.addColorStop(1, "#1d3f72");
+      g.addColorStop(0, "#102d61");
+      g.addColorStop(0.48, "#286ba2");
+      g.addColorStop(1, "#0e2a59");
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, 256, 128);
-      ctx.fillStyle = "rgba(240,245,250,0.55)";
-      for (let i = 0; i < 40; i++) {
+      let seed = 91;
+      const rand = () => {
+        seed = (seed * 16807) % 2147483647;
+        return (seed - 1) / 2147483646;
+      };
+      ctx.fillStyle = "#4d7650";
+      for (let i = 0; i < 24; i++) {
         ctx.beginPath();
         ctx.ellipse(
-          Math.random() * 256,
-          Math.random() * 128,
-          8 + Math.random() * 18,
-          3 + Math.random() * 8,
-          Math.random(),
+          rand() * 256,
+          20 + rand() * 88,
+          7 + rand() * 22,
+          4 + rand() * 12,
+          rand(),
           0,
           Math.PI * 2,
         );
         ctx.fill();
       }
+      ctx.strokeStyle = "rgba(245,250,255,0.42)";
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 32; i++) {
+        ctx.beginPath();
+        const y = rand() * 128;
+        ctx.moveTo(rand() * 256, y);
+        ctx.bezierCurveTo(rand() * 256, y - 8, rand() * 256, y + 8, rand() * 256, y);
+        ctx.stroke();
+      }
     }
     const tex = this.track(new THREE.CanvasTexture(canvas));
     tex.colorSpace = THREE.SRGBColorSpace;
+    const group = new THREE.Group();
     const mesh = new THREE.Mesh(
       this.track(new THREE.SphereGeometry(18, 32, 24)),
       this.track(
         new THREE.MeshStandardMaterial({
           map: tex,
-          emissive: 0x112244,
-          emissiveIntensity: 0.35,
+          emissive: 0x07172d,
+          emissiveIntensity: 0.22,
           roughness: 0.85,
           metalness: 0.05,
         }),
       ),
     );
-    mesh.position.set(-220, 90, -380);
-    return mesh;
+    group.add(mesh);
+    const atmosphere = new THREE.Mesh(
+      this.track(new THREE.SphereGeometry(18.8, 32, 24)),
+      this.track(
+        new THREE.MeshBasicMaterial({
+          color: 0x4b9eff,
+          transparent: true,
+          opacity: 0.16,
+          blending: THREE.AdditiveBlending,
+          side: THREE.BackSide,
+          depthWrite: false,
+          fog: false,
+        }),
+      ),
+    );
+    group.add(atmosphere);
+    group.position.set(-220, 90, -380);
+    return group;
+  }
+
+  private makeSun(): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(-820, 590, 430);
+    const texture = this.makeRadialTexture([
+      [0, "rgba(255,255,244,1)"],
+      [0.16, "rgba(255,239,178,1)"],
+      [0.42, "rgba(255,173,72,0.32)"],
+      [1, "rgba(255,126,42,0)"],
+    ]);
+    const glow = new THREE.Sprite(
+      this.track(
+        new THREE.SpriteMaterial({
+          map: texture,
+          color: 0xffffff,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          fog: false,
+        }),
+      ),
+    );
+    glow.scale.set(145, 145, 1);
+    group.add(glow);
+    const core = new THREE.Sprite(
+      this.track(
+        new THREE.SpriteMaterial({
+          map: texture,
+          color: 0xfff5cf,
+          transparent: true,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          depthTest: false,
+          fog: false,
+        }),
+      ),
+    );
+    core.scale.set(42, 42, 1);
+    group.add(core);
+    return group;
+  }
+
+  private makeRadialTexture(stops: Array<[number, string]>): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+      for (const [offset, color] of stops) gradient.addColorStop(offset, color);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, 256, 256);
+    }
+    const texture = this.track(new THREE.CanvasTexture(canvas));
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
   }
 
   private craterField(): { x: number; z: number; r: number; d: number }[] {
@@ -364,9 +456,9 @@ export class LandingScene {
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const rock = new THREE.Color(0x6a6258);
-    const dust = new THREE.Color(0x9a8f7d);
-    const shade = new THREE.Color(0x4a433c);
+    const rock = new THREE.Color(0x6d6b67);
+    const dust = new THREE.Color(0x99958d);
+    const shade = new THREE.Color(0x3b3a39);
 
     for (let i = 0; i < pos.count; i++) {
       const px = pos.getX(i);
@@ -385,10 +477,14 @@ export class LandingScene {
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
 
+    const detail = this.makeLunarDetailTexture();
     const mat = new THREE.MeshStandardMaterial({
       vertexColors: true,
-      roughness: 0.97,
-      metalness: 0.02,
+      map: detail,
+      bumpMap: detail,
+      bumpScale: 0.32,
+      roughness: 0.92,
+      metalness: 0,
       flatShading: false,
     });
     const mesh = new THREE.Mesh(geo, mat);
@@ -397,17 +493,68 @@ export class LandingScene {
     return mesh;
   }
 
+  private makeLunarDetailTexture(): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      const image = ctx.createImageData(512, 512);
+      let seed = 1337;
+      for (let i = 0; i < image.data.length; i += 4) {
+        seed = (seed * 16807) % 2147483647;
+        const fine = (seed / 2147483647 - 0.5) * 16;
+        const x = (i / 4) % 512;
+        const y = Math.floor(i / 4 / 512);
+        const broad =
+          Math.sin(x * 0.021 + Math.cos(y * 0.013)) * 8 +
+          Math.cos(y * 0.017 + Math.sin(x * 0.009)) * 7 +
+          Math.sin((x + y) * 0.006) * 5;
+        const value = THREE.MathUtils.clamp(164 + fine + broad, 118, 204);
+        image.data[i] = value;
+        image.data[i + 1] = value;
+        image.data[i + 2] = value * 0.98;
+        image.data[i + 3] = 255;
+      }
+      ctx.putImageData(image, 0, 0);
+    }
+    const texture = this.track(new THREE.CanvasTexture(canvas));
+    // Map once across the field. Repeating procedural canvas noise introduces
+    // visible seams at grazing lunar light angles.
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
+    return texture;
+  }
+
   private makeFarRim(): THREE.Mesh {
-    const geo = new THREE.CylinderGeometry(420, 460, 40, 64, 1, true);
+    const geo = new THREE.CylinderGeometry(420, 470, 58, 96, 6, true);
+    const positions = geo.attributes.position;
+    for (let i = 0; i < positions.count; i++) {
+      const x = positions.getX(i);
+      const z = positions.getZ(i);
+      const angle = Math.atan2(z, x);
+      const ridge =
+        Math.sin(angle * 5.0) * 8 +
+        Math.sin(angle * 11.0 + 1.4) * 4 +
+        Math.sin(angle * 23.0) * 1.8;
+      const vertical = positions.getY(i);
+      const topWeight = THREE.MathUtils.smoothstep(vertical, -10, 29);
+      positions.setY(i, vertical + ridge * topWeight);
+    }
+    positions.needsUpdate = true;
+    geo.computeVertexNormals();
     const mat = new THREE.MeshStandardMaterial({
-      color: 0x4e4740,
+      color: 0x393632,
       roughness: 1,
       metalness: 0,
       side: THREE.BackSide,
       flatShading: true,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.y = -8;
+    mesh.position.y = -14;
+    mesh.receiveShadow = true;
     return mesh;
   }
 

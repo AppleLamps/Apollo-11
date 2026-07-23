@@ -24,25 +24,40 @@ export function createLander(): THREE.Group {
     metalness: 0.2,
     roughness: 0.6,
   });
+  const blackFoil = new THREE.MeshStandardMaterial({
+    color: 0x111418,
+    metalness: 0.2,
+    roughness: 0.78,
+  });
+  const glass = new THREE.MeshPhysicalMaterial({
+    color: 0x77b6cf,
+    emissive: 0x17384a,
+    emissiveIntensity: 0.65,
+    metalness: 0.05,
+    roughness: 0.12,
+    clearcoat: 1,
+    clearcoatRoughness: 0.08,
+  });
 
-  const ascent = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.05, 1.15), body);
+  const ascent = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.05, 1.15, 2, 2, 2), body);
   ascent.position.y = 1.15;
   group.add(ascent);
+  const cabinTop = new THREE.Mesh(new THREE.CylinderGeometry(0.58, 0.77, 0.38, 8), body);
+  cabinTop.position.y = 1.86;
+  group.add(cabinTop);
   const hatch = new THREE.Mesh(new THREE.CircleGeometry(0.22, 20), graphite);
   hatch.position.set(0, 1.15, 0.58);
   group.add(hatch);
-  const window = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.28, 0.2),
-    new THREE.MeshStandardMaterial({
-      color: 0x88c4e0,
-      emissive: 0x224455,
-      emissiveIntensity: 0.4,
-      metalness: 0.2,
-      roughness: 0.2,
-    }),
-  );
-  window.position.set(0.35, 1.35, 0.581);
-  group.add(window);
+  for (const side of [-1, 1]) {
+    const window = new THREE.Mesh(new THREE.CircleGeometry(0.19, 5), glass);
+    window.scale.set(1.1, 0.78, 1);
+    window.position.set(side * 0.32, 1.46, 0.581);
+    window.rotation.z = side * -0.08;
+    group.add(window);
+  }
+  const hatchRim = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.025, 8, 24), body);
+  hatchRim.position.set(0, 1.15, 0.592);
+  group.add(hatchRim);
 
   const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 8), body);
   antenna.position.set(-0.35, 1.95, -0.2);
@@ -62,6 +77,12 @@ export function createLander(): THREE.Group {
     panel.position.set(Math.cos(angle) * 1.15, 0.35, Math.sin(angle) * 1.15);
     panel.rotation.y = -angle + Math.PI / 2;
     group.add(panel);
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.72, 0.055), blackFoil);
+    seam.position.copy(panel.position);
+    seam.position.x += Math.cos(angle) * 0.025;
+    seam.position.z += Math.sin(angle) * 0.025;
+    seam.rotation.y = panel.rotation.y;
+    group.add(seam);
   }
 
   const band = new THREE.Mesh(new THREE.CylinderGeometry(1.16, 1.16, 0.08, 8), stripe);
@@ -80,6 +101,17 @@ export function createLander(): THREE.Group {
     const rcs = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.18, 0.22), graphite);
     rcs.position.set(Math.cos(angle) * 0.85, 1.35, Math.sin(angle) * 0.85);
     group.add(rcs);
+    for (let nozzleIndex = 0; nozzleIndex < 2; nozzleIndex++) {
+      const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.13, 8, 1, true), blackFoil);
+      nozzle.position.set(
+        Math.cos(angle) * (0.98 + nozzleIndex * 0.02),
+        1.31 + nozzleIndex * 0.1,
+        Math.sin(angle) * (0.98 + nozzleIndex * 0.02),
+      );
+      nozzle.rotation.z = Math.PI / 2;
+      nozzle.rotation.y = -angle;
+      group.add(nozzle);
+    }
   }
 
   for (let i = 0; i < 4; i++) {
@@ -97,6 +129,10 @@ export function createLander(): THREE.Group {
     strut.rotation.z = 0.35;
     strut.rotation.x = -0.4;
     leg.add(strut);
+    const brace = strut.clone();
+    brace.position.z = -0.2;
+    brace.rotation.x = 0.4;
+    leg.add(brace);
     const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, 0.08, 14), foil);
     pad.position.set(1.05, -1.15, 0);
     pad.receiveShadow = true;
@@ -105,6 +141,24 @@ export function createLander(): THREE.Group {
     probe.position.set(1.05, -1.4, 0);
     leg.add(probe);
     group.add(leg);
+  }
+
+  // Front ladder and small descent-stage equipment boxes add readable scale.
+  for (let i = 0; i < 6; i++) {
+    const rung = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.42, 6), body);
+    rung.rotation.z = Math.PI / 2;
+    rung.position.set(0, 0.8 - i * 0.22, 1.37);
+    group.add(rung);
+  }
+  for (const x of [-0.2, 0.2]) {
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 1.22, 6), body);
+    rail.position.set(x, 0.25, 1.37);
+    group.add(rail);
+  }
+  for (const x of [-0.75, 0.75]) {
+    const equipment = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.18), blackFoil);
+    equipment.position.set(x, 0.35, 1.14);
+    group.add(equipment);
   }
 
   group.traverse((object) => {
