@@ -2,3 +2,5 @@ yaYUL.exe
 node_modules
 landing-sim/dist
 landing-sim/node_modules
+landing-sim/.vercel
+landing-sim/.env*

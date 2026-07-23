@@ -9,6 +9,10 @@ A modern, browser-based Lunar Module descent sandbox inspired by `Luminary099`.
 
 This lives beside the historical AGC sources; it does **not** modify or replace them.
 
+## Live demo
+
+Production: [https://luminary-landing-sim.vercel.app](https://luminary-landing-sim.vercel.app)
+
 ## Run
 
 ```bash

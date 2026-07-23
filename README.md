@@ -100,7 +100,9 @@ out [Virtual AGC][8].
 
 ## Landing sim (modern MVP)
 
-A browser Lunar Module descent sandbox (autopilot + faults + WebGL UI) lives in [`landing-sim/`](landing-sim/):
+A browser Lunar Module descent sandbox (autopilot + faults + WebGL UI) lives in [`landing-sim/`](landing-sim/).
+
+Live: [https://luminary-landing-sim.vercel.app](https://luminary-landing-sim.vercel.app)
 
 ```bash
 cd landing-sim
