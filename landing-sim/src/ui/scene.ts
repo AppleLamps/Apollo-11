@@ -1,8 +1,17 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { CameraController } from "../rendering/CameraController";
 import { EngineEffects } from "../rendering/effects/EngineEffects";
 import { createLandingSite } from "../rendering/environment/createLandingSite";
 import { setupLighting } from "../rendering/environment/setupLighting";
+import {
+  getInitialGraphicsQuality,
+  GRAPHICS_PROFILES,
+  persistGraphicsQuality,
+  type GraphicsQuality,
+} from "../rendering/GraphicsQuality";
 import { ResourceTracker } from "../rendering/ResourceTracker";
 import { createLander } from "../rendering/vehicles/createLander";
 import type { RenderSnapshot } from "../sim/types";
@@ -26,6 +35,9 @@ export class LandingScene {
   private farRim: THREE.Mesh;
   private targetMarker: THREE.Group;
   private landingBeacon: THREE.Mesh | null;
+  private sunLight: THREE.DirectionalLight;
+  private composer: EffectComposer | null = null;
+  private quality: GraphicsQuality;
   private clock = new THREE.Clock();
   private contextLost = false;
   private readonly resources = new ResourceTracker();
@@ -44,13 +56,15 @@ export class LandingScene {
   };
 
   constructor(canvas: HTMLCanvasElement) {
+    this.quality = getInitialGraphicsQuality();
+    const profile = GRAPHICS_PROFILES[this.quality];
     this.renderer = new THREE.WebGLRenderer({
       canvas,
       antialias: true,
       alpha: false,
       powerPreference: "high-performance",
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, profile.pixelRatioCap));
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -71,7 +85,7 @@ export class LandingScene {
 
     this.cameraController = new CameraController(this.camera, canvas);
 
-    setupLighting(this.scene);
+    this.sunLight = setupLighting(this.scene, profile.shadowMapSize);
     this.starsFar = this.makeStars(5200, 900, 2400, 0.72, 0xaebbd0);
     this.starsNear = this.makeStars(1200, 380, 980, 1.55, 0xf4f7ff);
     this.scene.add(this.starsFar, this.starsNear);
@@ -96,12 +110,14 @@ export class LandingScene {
     this.scene.add(this.lander);
 
     this.engineEffects = new EngineEffects(this.lander, this.resources);
+    this.engineEffects.setQuality(this.quality);
     this.scene.add(this.engineEffects.dust);
     this.resources.trackObject(this.scene);
 
     window.addEventListener("resize", this.onResize);
     canvas.addEventListener("webglcontextlost", this.onContextLost, false);
     canvas.addEventListener("webglcontextrestored", this.onContextRestored, false);
+    this.configureComposer(profile.bloom);
     this.resize();
   }
 
@@ -113,21 +129,41 @@ export class LandingScene {
     return this.cameraController.getMode();
   }
 
+  getGraphicsQuality(): GraphicsQuality {
+    return this.quality;
+  }
+
+  setGraphicsQuality(quality: GraphicsQuality): void {
+    if (quality === this.quality) return;
+    this.quality = quality;
+    const profile = GRAPHICS_PROFILES[quality];
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, profile.pixelRatioCap));
+    this.sunLight.shadow.mapSize.set(profile.shadowMapSize, profile.shadowMapSize);
+    this.sunLight.shadow.map?.dispose();
+    this.sunLight.shadow.map = null;
+    this.engineEffects.setQuality(quality);
+    persistGraphicsQuality(quality);
+    this.configureComposer(profile.bloom);
+    this.resize(true);
+  }
+
   dispose(): void {
     window.removeEventListener("resize", this.onResize);
     this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
     this.cameraController.dispose();
+    this.composer?.dispose();
     this.resources.dispose();
     this.renderer.dispose();
   }
 
-  resize(): void {
+  resize(force = false): void {
     const canvas = this.renderer.domElement;
     const width = canvas.clientWidth;
     const height = canvas.clientHeight;
-    if (canvas.width !== width || canvas.height !== height) {
+    if (force || canvas.width !== width || canvas.height !== height) {
       this.renderer.setSize(width, height, false);
+      this.composer?.setSize(width, height);
       this.camera.aspect = width / Math.max(height, 1);
       this.camera.updateProjectionMatrix();
     }
@@ -177,7 +213,33 @@ export class LandingScene {
     this.earth.rotation.y = t * 0.02;
     this.sun.rotation.z = -t * 0.002;
 
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) {
+      this.composer.render();
+    } else {
+      this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  private configureComposer(enabled: boolean): void {
+    this.composer?.dispose();
+    this.composer = null;
+    if (!enabled) return;
+
+    const composer = new EffectComposer(this.renderer);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, GRAPHICS_PROFILES[this.quality].pixelRatioCap));
+    composer.addPass(new RenderPass(this.scene, this.camera));
+    composer.addPass(
+      new UnrealBloomPass(
+        new THREE.Vector2(
+          this.renderer.domElement.clientWidth,
+          this.renderer.domElement.clientHeight,
+        ),
+        0.58,
+        0.32,
+        0.86,
+      ),
+    );
+    this.composer = composer;
   }
 
   private track<T extends { dispose: () => void }>(resource: T): T {

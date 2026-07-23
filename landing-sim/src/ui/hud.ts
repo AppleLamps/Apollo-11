@@ -1,4 +1,10 @@
 import type { AudioController } from "../audio/AudioController";
+import {
+  GRAPHICS_PROFILES,
+  isGraphicsQuality,
+  type GraphicsQuality,
+} from "../rendering/GraphicsQuality";
+import type { PerformanceReading } from "../rendering/FramePerformanceMonitor";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
 import { CAMERA_MODES, isCameraMode, type CameraMode } from "./cameraRig";
@@ -26,6 +32,8 @@ export class Hud {
   private btnReset: HTMLButtonElement;
   private btnPause: HTMLButtonElement;
   private btnSound: HTMLButtonElement;
+  private graphicsQuality: HTMLSelectElement;
+  private performanceMonitor: HTMLOutputElement;
   private cameraModes: HTMLElement;
   private cameraHint: HTMLElement;
   private lastAnnounceKey = "";
@@ -69,12 +77,15 @@ export class Hud {
     this.btnReset = el("btn-reset") as HTMLButtonElement;
     this.btnPause = el("btn-pause") as HTMLButtonElement;
     this.btnSound = el("btn-sound") as HTMLButtonElement;
+    this.graphicsQuality = el("graphics-quality") as HTMLSelectElement;
+    this.performanceMonitor = el("performance-monitor") as HTMLOutputElement;
     this.cameraModes = el("camera-modes");
     this.cameraHint = el("camera-hint");
 
     this.faultPanel = new FaultPanel(el("fault-buttons"), world, onChange);
     this.mountCameraModes();
     this.bindControls();
+    this.syncGraphicsQuality();
     this.render(world.telemetry());
   }
 
@@ -139,6 +150,12 @@ export class Hud {
     this.btnSound.addEventListener("click", () => {
       void this.audio.toggle().then(() => this.syncSoundButton());
     });
+    this.graphicsQuality.addEventListener("change", () => {
+      const quality = this.graphicsQuality.value;
+      if (!isGraphicsQuality(quality)) return;
+      this.scene.setGraphicsQuality(quality);
+      this.syncGraphicsQuality();
+    });
 
     window.addEventListener("keydown", this.onKeyDown);
   }
@@ -149,6 +166,33 @@ export class Hud {
     this.btnSound.classList.toggle("active", enabled);
     this.btnSound.setAttribute("aria-pressed", String(enabled));
     this.btnSound.title = enabled ? "Mute simulator audio" : "Enable simulator audio";
+  }
+
+  private syncGraphicsQuality(): void {
+    const quality: GraphicsQuality = this.scene.getGraphicsQuality();
+    this.graphicsQuality.value = quality;
+    const profile = GRAPHICS_PROFILES[quality];
+    this.graphicsQuality.title = `${profile.label}: ${profile.shadowMapSize}px shadows, ${profile.dustCount} dust particles${profile.bloom ? ", bloom enabled" : ""}`;
+    document.getElementById("app")?.setAttribute("data-quality", quality);
+  }
+
+  updatePerformance(reading: PerformanceReading): void {
+    if (reading.downgradeTo) {
+      this.scene.setGraphicsQuality(reading.downgradeTo);
+      this.syncGraphicsQuality();
+      this.performanceMonitor.textContent =
+        `Auto ${GRAPHICS_PROFILES[reading.downgradeTo].label} · ${Math.round(reading.fps)} FPS`;
+      this.performanceMonitor.title =
+        `Graphics automatically reduced after sustained ${reading.frameMs.toFixed(1)} ms frames`;
+    } else {
+      this.performanceMonitor.textContent =
+        `${Math.round(reading.fps)} FPS · ${reading.frameMs.toFixed(1)} ms`;
+      this.performanceMonitor.title =
+        reading.state === "strained"
+          ? "Rendering is below the 48 FPS adaptation target"
+          : "Live average rendering performance";
+    }
+    this.performanceMonitor.dataset.state = reading.state;
   }
 
   dispose(): void {

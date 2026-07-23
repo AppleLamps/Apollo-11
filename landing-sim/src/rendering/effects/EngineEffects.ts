@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import type { RenderSnapshot } from "../../sim/types";
 import type { ResourceTracker } from "../ResourceTracker";
+import type { GraphicsQuality } from "../GraphicsQuality";
+import { GRAPHICS_PROFILES } from "../GraphicsQuality";
 
 export class EngineEffects {
   private readonly plumeCore: THREE.Mesh;
@@ -9,6 +11,7 @@ export class EngineEffects {
   private readonly groundGlow: THREE.Mesh;
   private readonly engineLight: THREE.PointLight;
   private readonly dustBase: Float32Array;
+  private dustCount = GRAPHICS_PROFILES.high.dustCount;
   readonly dust: THREE.Points;
 
   constructor(lander: THREE.Group, resources: ResourceTracker) {
@@ -82,6 +85,12 @@ export class EngineEffects {
     this.dust = dustResult.points;
     this.dustBase = dustResult.base;
     this.dust.add(this.groundGlow);
+    this.setQuality("high");
+  }
+
+  setQuality(quality: GraphicsQuality): void {
+    this.dustCount = GRAPHICS_PROFILES[quality].dustCount;
+    this.dust.geometry.setDrawRange(0, this.dustCount);
   }
 
   update(
@@ -127,7 +136,7 @@ export class EngineEffects {
       : 0;
     const dustStrength = nearSurface ? THREE.MathUtils.clamp((110 - altitude) / 90, 0, 1) * thrust : 0;
     const positions = this.dust.geometry.attributes.position as THREE.BufferAttribute;
-    for (let i = 0; i < positions.count; i++) {
+    for (let i = 0; i < this.dustCount; i++) {
       const baseIndex = i * 3;
       const phase = (elapsed * (2.2 + (i % 11) * 0.08) + this.dustBase[baseIndex + 2]) % 1;
       const radius = this.dustBase[baseIndex] * (0.3 + phase * 1.15);
@@ -148,7 +157,7 @@ export class EngineEffects {
 }
 
 function createDust(resources: ResourceTracker): { points: THREE.Points; base: Float32Array } {
-  const count = 900;
+  const count = GRAPHICS_PROFILES.cinematic.dustCount;
   const positions = new Float32Array(count * 3);
   const base = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {

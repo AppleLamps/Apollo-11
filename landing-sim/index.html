@@ -16,6 +16,22 @@
           <p class="brand-sub">LM-99 descent autopilot</p>
         </div>
         <div class="run-controls">
+          <output
+            id="performance-monitor"
+            class="performance-monitor"
+            aria-label="Rendering performance"
+            title="Live rendering performance"
+          >
+            Measuring…
+          </output>
+          <label class="quality-control" title="Graphics quality">
+            <span>Graphics</span>
+            <select id="graphics-quality" aria-label="Graphics quality">
+              <option value="low">Low</option>
+              <option value="high">High</option>
+              <option value="cinematic">Cinematic</option>
+            </select>
+          </label>
           <button type="button" id="btn-start" class="btn primary">Engage</button>
           <button type="button" id="btn-reset" class="btn">Reset</button>
           <button type="button" id="btn-pause" class="btn" disabled>Pause</button>

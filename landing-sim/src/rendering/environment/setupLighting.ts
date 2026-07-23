@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function setupLighting(scene: THREE.Scene): void {
+export function setupLighting(scene: THREE.Scene, shadowMapSize: number): THREE.DirectionalLight {
   // The Moon has no atmosphere: keep ambient light restrained so terrain
   // relief is defined primarily by the hard, low-angle sun.
   scene.add(new THREE.HemisphereLight(0x9bacbd, 0x171411, 0.2));
@@ -9,8 +9,7 @@ export function setupLighting(scene: THREE.Scene): void {
   sun.name = "sun-light";
   sun.position.set(-160, 115, 85);
   sun.castShadow = true;
-  const mapSize = isLowPowerDevice() ? 1024 : 2048;
-  sun.shadow.mapSize.set(mapSize, mapSize);
+  sun.shadow.mapSize.set(shadowMapSize, shadowMapSize);
   sun.shadow.camera.near = 1;
   sun.shadow.camera.far = 420;
   sun.shadow.camera.left = -95;
@@ -29,12 +28,5 @@ export function setupLighting(scene: THREE.Scene): void {
   const rim = new THREE.DirectionalLight(0xffc477, 0.22);
   rim.position.set(40, 20, 100);
   scene.add(rim);
-}
-
-function isLowPowerDevice(): boolean {
-  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
-  const smallViewport = window.matchMedia("(max-width: 700px)").matches;
-  const lowMemory = typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4;
-  const lowCpu = typeof nav.hardwareConcurrency === "number" && nav.hardwareConcurrency <= 4;
-  return smallViewport || lowMemory || lowCpu;
+  return sun;
 }

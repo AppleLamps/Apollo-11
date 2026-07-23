@@ -6,6 +6,7 @@ import "@fontsource/ibm-plex-mono/latin-500.css";
 import "@fontsource/ibm-plex-mono/latin-600.css";
 import "./style.css";
 import { AudioController } from "./audio/AudioController";
+import { FramePerformanceMonitor } from "./rendering/FramePerformanceMonitor";
 import { sanitizeDt } from "./sim/safeMath";
 import { LandingWorld } from "./sim/world";
 import { Hud } from "./ui/hud";
@@ -20,6 +21,7 @@ const world = new LandingWorld();
 const scene = new LandingScene(canvas);
 const audio = new AudioController();
 const hud = new Hud(world, scene, audio, () => hud.render(world.telemetry()));
+const performanceMonitor = new FramePerformanceMonitor();
 
 let last = performance.now();
 let raf = 0;
@@ -36,6 +38,8 @@ function frame(now: number): void {
   const telemetry = world.telemetry();
   hud.render(telemetry);
   scene.render(world.renderSnapshot(telemetry));
+  const performanceReading = performanceMonitor.update(rawDt, scene.getGraphicsQuality());
+  if (performanceReading) hud.updatePerformance(performanceReading);
   audio.update(telemetry, world.state.running, world.state.paused);
 
   raf = requestAnimationFrame(frame);

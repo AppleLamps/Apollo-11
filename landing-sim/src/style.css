@@ -119,9 +119,63 @@ body {
 
 .run-controls {
   display: flex;
+  align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.performance-monitor {
+  min-width: 8.6rem;
+  border: 1px solid var(--line);
+  background: rgba(5, 7, 12, 0.6);
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.05em;
+  padding: 0.55rem 0.65rem;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.performance-monitor[data-state="stable"] {
+  color: var(--ok);
+}
+
+.performance-monitor[data-state="strained"] {
+  color: var(--amber);
+  border-color: rgba(212, 168, 92, 0.45);
+}
+
+.performance-monitor[data-state="adapted"] {
+  color: var(--signal);
+  border-color: rgba(126, 182, 201, 0.55);
+  background: rgba(126, 182, 201, 0.1);
+}
+
+.quality-control {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quality-control select {
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: rgba(5, 7, 12, 0.88);
+  color: var(--signal);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  padding: 0.55rem 1.7rem 0.55rem 0.65rem;
+  cursor: pointer;
+}
+
+.quality-control select:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
 }
 
 .btn {
