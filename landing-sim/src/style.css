@@ -52,10 +52,14 @@ body {
   width: 100%;
   height: 100%;
   display: block;
+  cursor: default;
+}
+
+#app[data-camera="orbit"] #viewport {
   cursor: grab;
 }
 
-#viewport:active {
+#app[data-camera="orbit"] #viewport:active {
   cursor: grabbing;
 }
 

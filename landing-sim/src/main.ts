@@ -20,6 +20,7 @@ const scene = new LandingScene(canvas);
 const hud = new Hud(world, scene, () => hud.render(world.telemetry()));
 
 let last = performance.now();
+let raf = 0;
 
 function frame(now: number): void {
   // Guard against tab-suspend clock jumps and non-finite timestamps
@@ -34,7 +35,13 @@ function frame(now: number): void {
   hud.render(telemetry);
   scene.sync(world, telemetry);
 
-  requestAnimationFrame(frame);
+  raf = requestAnimationFrame(frame);
 }
 
-requestAnimationFrame(frame);
+raf = requestAnimationFrame(frame);
+
+window.addEventListener("pagehide", () => {
+  cancelAnimationFrame(raf);
+  hud.dispose();
+  scene.dispose();
+});

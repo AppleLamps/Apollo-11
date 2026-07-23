@@ -1,7 +1,7 @@
 import { FAULT_CATALOG, isFaultId } from "../sim/faults";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
-import { CAMERA_MODES, type CameraMode } from "./cameraRig";
+import { CAMERA_MODES, isCameraMode, type CameraMode } from "./cameraRig";
 import type { LandingScene } from "./scene";
 
 function fmt(n: number, digits = 1): string {
@@ -40,6 +40,28 @@ export class Hud {
   private valueNodes = new Map<string, HTMLElement>();
   private lastAnnounceKey = "";
   private lastAnnounceAt = 0;
+  private readonly onKeyDown = (event: KeyboardEvent): void => {
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable)
+    ) {
+      return;
+    }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+    const map: Record<string, CameraMode> = {
+      "1": "chase",
+      "2": "orbit",
+      "3": "side",
+      "4": "pad",
+      "5": "high",
+    };
+    const mode = map[event.key];
+    if (!mode) return;
+    event.preventDefault();
+    this.setCameraMode(mode);
+  };
 
   constructor(
     private world: LandingWorld,
@@ -116,15 +138,18 @@ export class Hud {
       btn.textContent = mode.label;
       btn.title = mode.hint;
       btn.addEventListener("click", () => {
-        this.setCameraMode(mode.id);
+        const id = btn.dataset.cameraMode;
+        if (!id || !isCameraMode(id)) return;
+        this.setCameraMode(id);
       });
       this.cameraModes.append(btn);
     }
     this.syncCameraModes();
   }
 
-  private setCameraMode(mode: CameraMode): void {
-    this.scene.setCameraMode(mode);
+  private setCameraMode(mode: string): void {
+    if (!isCameraMode(mode)) return;
+    if (!this.scene.setCameraMode(mode)) return;
     this.syncCameraModes();
   }
 
@@ -132,10 +157,12 @@ export class Hud {
     const active = this.scene.getCameraMode();
     const meta = CAMERA_MODES.find((m) => m.id === active);
     this.cameraHint.textContent = meta?.hint ?? "";
+    document.getElementById("app")?.setAttribute("data-camera", active);
     for (const btn of this.cameraModes.querySelectorAll<HTMLButtonElement>(".btn")) {
-      const id = btn.dataset.cameraMode as CameraMode | undefined;
-      btn.classList.toggle("active", id === active);
-      btn.setAttribute("aria-pressed", String(id === active));
+      const id = btn.dataset.cameraMode;
+      const on = id === active;
+      btn.classList.toggle("active", on);
+      btn.setAttribute("aria-pressed", String(on));
     }
   }
 
@@ -158,23 +185,11 @@ export class Hud {
       this.onChange();
     });
 
-    window.addEventListener("keydown", (event) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
-        return;
-      }
-      const map: Record<string, CameraMode> = {
-        "1": "chase",
-        "2": "orbit",
-        "3": "side",
-        "4": "pad",
-        "5": "high",
-      };
-      const mode = map[event.key];
-      if (mode) {
-        event.preventDefault();
-        this.setCameraMode(mode);
-      }
-    });
+    window.addEventListener("keydown", this.onKeyDown);
+  }
+
+  dispose(): void {
+    window.removeEventListener("keydown", this.onKeyDown);
   }
 
   syncFaultButtons(): void {

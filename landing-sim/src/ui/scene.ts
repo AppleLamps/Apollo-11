@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { Telemetry } from "../sim/types";
 import type { LandingWorld } from "../sim/world";
-import type { CameraMode } from "./cameraRig";
+import { isCameraMode, saneCameraScalar, type CameraMode } from "./cameraRig";
 
 const METERS_TO_SCENE = 0.01;
 
@@ -22,14 +22,25 @@ export class LandingScene {
   private terrain: THREE.Mesh;
   private farRim: THREE.Mesh;
   private targetMarker: THREE.Group;
-  private landingBeacon: THREE.Mesh;
+  private landingBeacon: THREE.Mesh | null;
   private clock = new THREE.Clock();
   private cameraMode: CameraMode = "chase";
+  private contextLost = false;
+  private readonly disposables: { dispose: () => void }[] = [];
   private readonly camTarget = new THREE.Vector3();
   private readonly lookAtTarget = new THREE.Vector3();
   private readonly landerWorld = new THREE.Vector3();
   private readonly padWorld = new THREE.Vector3(0, 0.2, 0);
+  private readonly scratchOffset = new THREE.Vector3();
   private readonly onResize = (): void => {
+    this.resize();
+  };
+  private readonly onContextLost = (event: Event): void => {
+    event.preventDefault();
+    this.contextLost = true;
+  };
+  private readonly onContextRestored = (): void => {
+    this.contextLost = false;
     this.resize();
   };
 
@@ -67,6 +78,7 @@ export class LandingScene {
     this.controls.maxDistance = 220;
     this.controls.enabled = false;
     this.controls.enablePan = false;
+    this.controls.enableZoom = true;
 
     this.setupLights();
     this.starsFar = this.makeStars(4200, 900, 2200, 0.55, 0xb8c4d4);
@@ -84,7 +96,8 @@ export class LandingScene {
 
     this.targetMarker = this.makeLandingSite();
     this.scene.add(this.targetMarker);
-    this.landingBeacon = this.targetMarker.getObjectByName("beacon") as THREE.Mesh;
+    const beacon = this.targetMarker.getObjectByName("beacon");
+    this.landingBeacon = beacon instanceof THREE.Mesh ? beacon : null;
 
     this.lander = this.makeLander();
     this.scene.add(this.lander);
@@ -116,17 +129,26 @@ export class LandingScene {
     this.scene.add(this.dust);
 
     window.addEventListener("resize", this.onResize);
+    canvas.addEventListener("webglcontextlost", this.onContextLost, false);
+    canvas.addEventListener("webglcontextrestored", this.onContextRestored, false);
     this.resize();
   }
 
-  setCameraMode(mode: CameraMode): void {
+  setCameraMode(mode: string): boolean {
+    if (!isCameraMode(mode)) return false;
+    const prev = this.cameraMode;
     this.cameraMode = mode;
     this.controls.enabled = mode === "orbit";
+
+    if (mode !== "orbit" && prev === "orbit") {
+      // Disable first so any in-flight pointer gesture stops affecting the camera
+      this.controls.enabled = false;
+    }
+
     if (mode === "orbit") {
       this.controls.target.copy(this.landerWorld);
-      // Seed a useful orbit distance if coming from another mode
-      const offset = this.camera.position.clone().sub(this.landerWorld);
-      if (offset.length() < 4) {
+      this.scratchOffset.copy(this.camera.position).sub(this.landerWorld);
+      if (this.scratchOffset.lengthSq() < 16) {
         this.camera.position.set(
           this.landerWorld.x - 28,
           this.landerWorld.y + 16,
@@ -135,6 +157,7 @@ export class LandingScene {
       }
       this.controls.update();
     }
+    return true;
   }
 
   getCameraMode(): CameraMode {
@@ -143,7 +166,13 @@ export class LandingScene {
 
   dispose(): void {
     window.removeEventListener("resize", this.onResize);
+    this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
+    this.renderer.domElement.removeEventListener("webglcontextrestored", this.onContextRestored);
     this.controls.dispose();
+    for (const item of this.disposables) {
+      item.dispose();
+    }
+    this.disposables.length = 0;
     this.renderer.dispose();
   }
 
@@ -159,11 +188,13 @@ export class LandingScene {
   }
 
   sync(world: LandingWorld, telemetry: Telemetry): void {
+    if (this.contextLost) return;
+
     const t = this.clock.getElapsedTime();
-    const x = world.state.x * METERS_TO_SCENE;
-    const y = world.state.y * METERS_TO_SCENE;
-    const surfaceY = world.state.surfaceHeightM * METERS_TO_SCENE;
-    const slope = world.state.surfaceSlopeRad;
+    const x = saneCameraScalar(world.state.x, 0) * METERS_TO_SCENE;
+    const y = saneCameraScalar(world.state.y, 100) * METERS_TO_SCENE;
+    const surfaceY = saneCameraScalar(world.state.surfaceHeightM, 0) * METERS_TO_SCENE;
+    const slope = saneCameraScalar(world.state.surfaceSlopeRad, 0);
 
     this.landerWorld.set(x, y, 0);
     this.padWorld.set(0, surfaceY + 0.15, 0);
@@ -221,9 +252,10 @@ export class LandingScene {
   private updateCamera(telemetry: Telemetry, t: number): void {
     const x = this.landerWorld.x;
     const y = this.landerWorld.y;
-    const alt = Math.max(telemetry.altitudeM, 1);
+    const alt = Math.max(saneCameraScalar(telemetry.altitudeM, 100), 1);
 
     if (this.cameraMode === "orbit") {
+      if (!Number.isFinite(this.landerWorld.x) || !Number.isFinite(this.landerWorld.y)) return;
       this.controls.target.lerp(this.landerWorld, 0.12);
       this.controls.update();
       return;
@@ -246,10 +278,18 @@ export class LandingScene {
       );
       this.lookAtTarget.set(x, y + 0.5, 0);
     } else {
-      // high
+      // high (default)
       const dist = THREE.MathUtils.clamp(30 + alt * METERS_TO_SCENE * 0.4, 28, 140);
       this.camTarget.set(x + dist * 0.15, y + dist * 0.85, dist * 0.35);
       this.lookAtTarget.set(x, Math.max(0.5, y - 4), 0);
+    }
+
+    if (
+      !Number.isFinite(this.camTarget.x) ||
+      !Number.isFinite(this.camTarget.y) ||
+      !Number.isFinite(this.camTarget.z)
+    ) {
+      return;
     }
 
     const lerp = this.cameraMode === "pad" ? 0.04 : 0.07;
@@ -264,7 +304,10 @@ export class LandingScene {
     const sun = new THREE.DirectionalLight(0xffe6c8, 2.1);
     sun.position.set(-120, 160, 70);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    // 2048 shadow maps can OOM / lose context on low-end GPUs
+    const lowPower = isLowPowerDevice();
+    const mapSize = lowPower ? 512 : 1024;
+    sun.shadow.mapSize.set(mapSize, mapSize);
     sun.shadow.camera.near = 10;
     sun.shadow.camera.far = 400;
     sun.shadow.camera.left = -80;
@@ -283,6 +326,11 @@ export class LandingScene {
     this.scene.add(rim);
   }
 
+  private track<T extends { dispose: () => void }>(resource: T): T {
+    this.disposables.push(resource);
+    return resource;
+  }
+
   private makeStars(
     count: number,
     rMin: number,
@@ -296,7 +344,7 @@ export class LandingScene {
     for (let i = 0; i < count; i++) {
       const r = rMin + Math.random() * (rMax - rMin);
       const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
+      const phi = Math.acos(THREE.MathUtils.clamp(2 * Math.random() - 1, -1, 1));
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
       positions[i * 3 + 1] = r * Math.cos(phi);
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
@@ -305,19 +353,21 @@ export class LandingScene {
       colors[i * 3 + 1] = base.g * (0.9 + Math.random() * 0.15);
       colors[i * 3 + 2] = base.b;
     }
-    const geo = new THREE.BufferGeometry();
+    const geo = this.track(new THREE.BufferGeometry());
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     return new THREE.Points(
       geo,
-      new THREE.PointsMaterial({
-        size,
-        sizeAttenuation: true,
-        transparent: true,
-        opacity: 0.95,
-        vertexColors: true,
-        depthWrite: false,
-      }),
+      this.track(
+        new THREE.PointsMaterial({
+          size,
+          sizeAttenuation: true,
+          transparent: true,
+          opacity: 0.95,
+          vertexColors: true,
+          depthWrite: false,
+        }),
+      ),
     );
   }
 
@@ -343,16 +393,18 @@ export class LandingScene {
         ctx.fillRect(x, y, 1.2, 1.2);
       }
     }
-    const tex = new THREE.CanvasTexture(canvas);
+    const tex = this.track(new THREE.CanvasTexture(canvas));
     tex.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      side: THREE.BackSide,
-      transparent: true,
-      opacity: 0.85,
-      depthWrite: false,
-    });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mat = this.track(
+      new THREE.MeshBasicMaterial({
+        map: tex,
+        side: THREE.BackSide,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+      }),
+    );
+    const mesh = new THREE.Mesh(this.track(geo), mat);
     mesh.rotation.z = 0.4;
     return mesh;
   }
@@ -386,17 +438,19 @@ export class LandingScene {
         ctx.fill();
       }
     }
-    const tex = new THREE.CanvasTexture(canvas);
+    const tex = this.track(new THREE.CanvasTexture(canvas));
     tex.colorSpace = THREE.SRGBColorSpace;
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(18, 32, 24),
-      new THREE.MeshStandardMaterial({
-        map: tex,
-        emissive: 0x112244,
-        emissiveIntensity: 0.35,
-        roughness: 0.85,
-        metalness: 0.05,
-      }),
+      this.track(new THREE.SphereGeometry(18, 32, 24)),
+      this.track(
+        new THREE.MeshStandardMaterial({
+          map: tex,
+          emissive: 0x112244,
+          emissiveIntensity: 0.35,
+          roughness: 0.85,
+          metalness: 0.05,
+        }),
+      ),
     );
     mesh.position.set(-220, 90, -380);
     return mesh;
@@ -694,17 +748,27 @@ export class LandingScene {
       positions[i * 3 + 1] = Math.random() * 2.2;
       positions[i * 3 + 2] = Math.sin(a) * r;
     }
-    const geo = new THREE.BufferGeometry();
+    const geo = this.track(new THREE.BufferGeometry());
     geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
     return new THREE.Points(
       geo,
-      new THREE.PointsMaterial({
-        color: 0xd2c3a8,
-        size: 0.42,
-        transparent: true,
-        opacity: 0,
-        depthWrite: false,
-      }),
+      this.track(
+        new THREE.PointsMaterial({
+          color: 0xd2c3a8,
+          size: 0.42,
+          transparent: true,
+          opacity: 0,
+          depthWrite: false,
+        }),
+      ),
     );
   }
+}
+
+function isLowPowerDevice(): boolean {
+  const nav = navigator as Navigator & { deviceMemory?: number; hardwareConcurrency?: number };
+  const smallViewport = typeof window !== "undefined" && window.matchMedia("(max-width: 700px)").matches;
+  const lowMem = typeof nav.deviceMemory === "number" && nav.deviceMemory <= 4;
+  const lowCpu = typeof nav.hardwareConcurrency === "number" && nav.hardwareConcurrency <= 4;
+  return smallViewport || lowMem || lowCpu;
 }
